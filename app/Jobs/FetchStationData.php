@@ -24,9 +24,19 @@ class FetchStationData implements ShouldQueue
         public ?Carbon $start = null,
         public ?Carbon $end = null
     ) {
-        // Se as datas não forem passadas, assume os últimos 30 minutos (operação em tempo real)
         $this->end = $end ?? now();
-        $this->start = $start ?? now()->subMinutes(30);
+
+        if (!$start) {
+            // Busca a data final da última requisição feita com sucesso para esta estação
+            $lastRecord = $station->rawData()->latest('fetched_end_at')->first();
+            
+            // Se existir, começa exatamente de onde parou. Se não existir, pega os últimos 30 minutos.
+            $this->start = $lastRecord 
+                ? Carbon::parse($lastRecord->fetched_end_at) 
+                : now()->subMinutes(30);
+        } else {
+            $this->start = $start;
+        }
     }
 
     public function handle(): void

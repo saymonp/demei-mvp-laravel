@@ -25,6 +25,10 @@ docker exec -it demei-app php artisan tinker
 App\Jobs\FetchStationData::dispatch(App\Models\Station::first());
 
 http://localhost:8000/horizon
+
+
+Alterações nos jobs:
+docker exec -it demei-app php artisan horizon:terminate
 <p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
 <p align="center">
