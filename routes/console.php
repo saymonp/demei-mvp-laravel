@@ -1,8 +1,15 @@
 <?php
 
-use Illuminate\Foundation\Inspiring;
-use Illuminate\Support\Facades\Artisan;
+use App\Jobs\FetchStationData;
+use App\Models\Station;
+use Illuminate\Support\Facades\Schedule;
 
-Artisan::command('inspire', function () {
-    $this->comment(Inspiring::quote());
-})->purpose('Display an inspiring quote');
+Schedule::call(function () {
+    $stations = Station::where('is_active', true)->get();
+
+    foreach ($stations as $station) {
+        FetchStationData::dispatch($station);
+    }
+})->everyThirtyMinutes();
+
+

@@ -38,6 +38,18 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
 
+  demei-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: demei-scheduler
+    restart: unless-stopped
+    command: php artisan schedule:work
+    depends_on:
+      - app
+      - redis
+      - db
+
 volumes:
   redis_data:
   db_data:
