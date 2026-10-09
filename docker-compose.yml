@@ -38,13 +38,31 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
 
-  demei-scheduler:
+  # 1. Serviço do Horizon (Processa as filas)
+  horizon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: demei-horizon
+    restart: unless-stopped
+    command: php artisan horizon
+    volumes:
+      - .:/var/www
+    depends_on:
+      - app
+      - redis
+      - db
+
+  # 2. Serviço do Scheduler (Relógio que dispara a cada 30 min)
+  scheduler:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: demei-scheduler
     restart: unless-stopped
     command: php artisan schedule:work
+    volumes:
+      - .:/var/www
     depends_on:
       - app
       - redis
