@@ -35,4 +35,12 @@ return [
         ],
     ],
 
+    'licor' => [
+    'url' => env('LICOR_API_URL'),
+    'token' => env('LICOR_BEARER_TOKEN'),
+    'loggers' => array_filter(
+        explode(',', env('LICOR_LOGGERS', ''))
+    ),
+],
+
 ];
