@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class StationRawData extends Model
 {
@@ -18,5 +19,10 @@ class StationRawData extends Model
     public function station(): BelongsTo
     {
         return $this->belongsTo(Station::class);
+    }
+
+    public function measurements(): HasMany
+    {
+        return $this->hasMany(Measurement::class, 'station_raw_data_id');
     }
 }

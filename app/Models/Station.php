@@ -13,4 +13,9 @@ class Station extends Model
     {
         return $this->hasMany(StationRawData::class);
     }
+
+    public function measurements(): HasMany
+    {
+        return $this->hasMany(Measurement::class);
+    }
 }
