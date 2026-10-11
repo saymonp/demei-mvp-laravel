@@ -14,7 +14,9 @@ docker exec -it demei-app php artisan make:job ClassifyStationData
 
 docker exec -it demei-app php artisan make:seeder StationSeeder
 
-rodar o seeder: docker exec -it demei-app php artisan db:seed --class=StationSeeder
+
+rodar o seeder: 
+docker exec -it demei-app php artisan db:seed --class=StationSeeder
 
 docker exec -it demei-app php artisan tinker
 // Dentro do tinker, digite:
@@ -36,6 +38,16 @@ docker exec -it demei-app php artisan horizon:terminate
 criar tabelas:
 create_measurements_table
 
+
+migrate fresh:
+docker exec -it demei-app php artisan migrate:refresh
+docker exec -it demei-app php artisan migrate:fresh --seed
+
+executar o sjobs manualmente:
+docker exec -it demei-app php artisan tinker
+App\Models\Station::where('is_active', true)->get()->each(
+    fn ($station) => App\Jobs\FetchStationData::dispatch($station)
+);
 <p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
 <p align="center">
