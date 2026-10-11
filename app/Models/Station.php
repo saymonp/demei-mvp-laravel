@@ -9,6 +9,17 @@ class Station extends Model
 {
     protected $guarded = [];
 
+     protected $fillable = [
+        'name',
+        'api_url',
+        'provider',
+        'bearer_token',
+        'loggers',
+        'latitude',
+        'longitude',
+        'is_active',
+    ];
+
     public function rawData(): HasMany
     {
         return $this->hasMany(StationRawData::class);
