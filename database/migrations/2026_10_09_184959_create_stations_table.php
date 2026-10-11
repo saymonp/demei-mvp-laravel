@@ -15,8 +15,11 @@ return new class extends Migration
             $table->id();
             $table->string('name');
             $table->string('api_url');
-            $table->text('bearer_token');
-            $table->string('loggers'); // Ex: "20770262,20748028"
+            $table->string('provider');
+            $table->text('bearer_token')->nullable();
+            $table->string('loggers')->nullable(); // Ex: "20770262,20748028"
+            $table->latitude('latitude')->nullable();
+            $table->longitude('longitude')->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
