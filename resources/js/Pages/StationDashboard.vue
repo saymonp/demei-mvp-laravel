@@ -1,8 +1,9 @@
 <script setup>
 import { ref, computed } from 'vue';
+import { router } from '@inertiajs/vue3';
 import VChart from 'vue-echarts';
 import { use } from 'echarts/core';
-import { CanvasRenderer } from 'echarts/renderers'; // <-- CORRIGIDO AQUI (era 'echarts/charts')
+import { CanvasRenderer } from 'echarts/renderers';
 import { LineChart } from 'echarts/charts';
 import { 
   GridComponent, 
@@ -26,8 +27,36 @@ const props = defineProps({
   measurements: {
     type: Array,
     default: () => []
+  },
+  stations: {
+    type: Array,
+    default: () => []
+  },
+  selectedStationId: {
+    type: Number,
+    default: 1
   }
 });
+
+// Estado reativo para a estação selecionada
+const currentStationId = ref(props.selectedStationId);
+
+// Função para alternar de estação recarregando via Inertia
+const changeStation = () => {
+  router.get('/station-dashboard', { station_id: currentStationId.value }, {
+    preserveState: true,
+    replace: true,
+  });
+};
+
+// Função para converter UTC para o fuso horário local do cliente (ex: America/Sao_Paulo)
+const formatLocalDate = (timestampStr) => {
+  if (!timestampStr) return '';
+  // Garante leitura correta do UTC adicionando 'Z' se não houver
+  const isoStr = timestampStr.endsWith('Z') ? timestampStr : timestampStr + 'Z';
+  const date = new Date(isoStr);
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+};
 
 // Filtros de qualidade interativos (checkboxes)
 // 0: Válido, 1: Inválido, 2: Suspeito, 3: Lacuna (Missing)
@@ -40,10 +69,10 @@ const qualityFilters = ref({
 
 // Legenda amigável para as flags
 const flagLabels = {
-  0: { label: 'Válido', color: 'bg-emerald-500 text-white' },
-  2: { label: 'Suspeito', color: 'bg-amber-500 text-white' },
-  1: { label: 'Inválido', color: 'bg-rose-500 text-white' },
-  3: { label: 'Lacuna (Gap)', color: 'bg-slate-400 text-white' },
+  0: { label: 'Válido' },
+  2: { label: 'Suspeito' },
+  1: { label: 'Inválido' },
+  3: { label: 'Lacuna (Gap)' },
 };
 
 // Filtragem baseada nas checkboxes selecionadas
@@ -72,14 +101,14 @@ const temperatureChartOption = computed(() => ({
     trigger: 'axis',
     formatter: (params) => {
       const data = params[0].data;
-      return `<b>Data/Hora:</b> ${params[0].name}<br/>
+      return `<b>Horário Local:</b> ${params[0].name}<br/>
               <b>Valor:</b> ${data.value !== null ? data.value + ' °C' : 'Sem Dados'}<br/>
               <b>Status:</b> ${flagLabels[data.flag]?.label || 'Desconhecido'}<br/>
               ${data.reason ? `<b>Motivo:</b> ${data.reason}` : ''}`;
     }
   },
   grid: { left: '10%', right: '5%', bottom: '15%' },
-  xAxis: { type: 'category', data: temperatureData.value.map(m => new Date(m.timestamp).toLocaleTimeString()) },
+  xAxis: { type: 'category', data: temperatureData.value.map(m => formatLocalDate(m.timestamp)) },
   yAxis: { type: 'value', name: '°C' },
   series: [{
     data: temperatureData.value.map(m => ({
@@ -115,14 +144,14 @@ const radiationChartOption = computed(() => ({
     trigger: 'axis',
     formatter: (params) => {
       const data = params[0].data;
-      return `<b>Data/Hora:</b> ${params[0].name}<br/>
+      return `<b>Horário Local:</b> ${params[0].name}<br/>
               <b>Valor:</b> ${data.value !== null ? data.value + ' W/m²' : 'Sem Dados'}<br/>
               <b>Status:</b> ${flagLabels[data.flag]?.label || 'Desconhecido'}<br/>
               ${data.reason ? `<b>Motivo:</b> ${data.reason}` : ''}`;
     }
   },
   grid: { left: '10%', right: '5%', bottom: '15%' },
-  xAxis: { type: 'category', data: radiationData.value.map(m => new Date(m.timestamp).toLocaleTimeString()) },
+  xAxis: { type: 'category', data: radiationData.value.map(m => formatLocalDate(m.timestamp)) },
   yAxis: { type: 'value', name: 'W/m²' },
   series: [{
     data: radiationData.value.map(m => ({
@@ -140,15 +169,15 @@ const radiationChartOption = computed(() => ({
 
 // --- GRÁFICO COMBINADO (Eixo Duplo) ---
 const combinedChartOption = computed(() => {
-  const timestamps = [...new Set(filteredData.value.map(m => new Date(m.timestamp).toLocaleTimeString()))];
+  const timestamps = [...new Set(filteredData.value.map(m => formatLocalDate(m.timestamp)))];
   
   const tempData = timestamps.map(time => {
-    const found = temperatureData.value.find(m => new Date(m.timestamp).toLocaleTimeString() === time);
+    const found = temperatureData.value.find(m => formatLocalDate(m.timestamp) === time);
     return found ? found.value : null;
   });
 
   const radData = timestamps.map(time => {
-    const found = radiationData.value.find(m => new Date(m.timestamp).toLocaleTimeString() === time);
+    const found = radiationData.value.find(m => formatLocalDate(m.timestamp) === time);
     return found ? found.value : null;
   });
 
@@ -172,7 +201,28 @@ const combinedChartOption = computed(() => {
 
 <template>
   <div class="p-6 max-w-7xl mx-auto space-y-6">
-    <h1 class="text-2xl font-bold text-slate-800">Dashboard Meteorológica - Controle de Qualidade</h1>
+    
+    <!-- Cabeçalho e Seletor de Estações -->
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
+      <div>
+        <h1 class="text-2xl font-bold text-slate-800">Dashboard Meteorológica</h1>
+        <p class="text-sm text-slate-500">Horários convertidos automaticamente para o seu fuso local.</p>
+      </div>
+      
+      <div class="flex items-center space-x-3">
+        <label for="station-select" class="text-sm font-medium text-slate-700">Estação:</label>
+        <select 
+          id="station-select" 
+          v-model="currentStationId" 
+          @change="changeStation"
+          class="border-slate-300 rounded-xl text-sm focus:ring-indigo-500 focus:border-indigo-500 shadow-sm px-4 py-2"
+        >
+          <option v-for="station in stations" :key="station.id" :value="station.id">
+            {{ station.name }} ({{ station.provider }})
+          </option>
+        </select>
+      </div>
+    </div>
 
     <!-- Barra de Filtros de Qualidade (Checkboxes Estilizadas) -->
     <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-100 flex flex-wrap items-center gap-4">
