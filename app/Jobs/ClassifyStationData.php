@@ -75,8 +75,7 @@ class ClassifyStationData implements ShouldQueue
                 if ($previousTs !== null) {
                     $from = CarbonImmutable::createFromTimestampUTC($previousTs);
                     
-                    // Se o GapFiller aceitar o step seconds, você pode repassá-lo aqui:
-                    foreach ($gaps->missingBetween($from, $readingTimestamp) as $missingAt) {
+                    foreach ($gaps->missingBetween($from, $readingTimestamp, $profile->stepSeconds()) as $missingAt) {
                         $missingUtc = $missingAt->setTimezone('UTC');
                         $rows[] = $this->row($raw, $reading, $missingUtc, null, $reading->unit, QualityFlag::Missing, FlagReason::Gap, $now);
                         $totals[QualityFlag::Missing->value]++;
@@ -117,6 +116,7 @@ class ClassifyStationData implements ShouldQueue
         Log::error("Falha ao classificar a coleta bruta #{$this->rawData->id}: {$e->getMessage()}");
     }
 
+    /** Última medição anterior e, para temperatura, as leituras válidas da janela móvel. */
     private function loadContext(int $stationId, Reading $first): SeriesContext
     {
         $firstTimestampUtc = $first->timestamp->setTimezone('UTC');
@@ -150,6 +150,7 @@ class ClassifyStationData implements ShouldQueue
         );
     }
 
+    /** O banco guarda UTC; lê o valor cru para não depender do fuso da aplicação. */
     private function unix(Measurement $m): int
     {
         return CarbonImmutable::parse($m->getRawOriginal('timestamp'), 'UTC')->timestamp;

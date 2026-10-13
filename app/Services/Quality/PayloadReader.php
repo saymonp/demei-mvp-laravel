@@ -14,8 +14,8 @@ class PayloadReader
     {
         $profile = ProviderProfile::for($rawData->station->provider);
 
-        $payload = is_array($rawData->payload) 
-            ? $rawData->payload 
+        $payload = is_array($rawData->payload)
+            ? $rawData->payload
             : (json_decode((string) $rawData->payload, true) ?? []);
 
         return match ($profile->provider) {
@@ -43,7 +43,7 @@ class PayloadReader
 
         // Agrupa por sensor e tipo de dado
         return collect($readings)
-            ->groupBy(fn (Reading $r) => $r->sensorSn . '-' . $r->dataType)
+            ->groupBy(fn(Reading $r) => $r->sensorSn . '-' . $r->dataType)
             ->all();
     }
 
@@ -51,22 +51,46 @@ class PayloadReader
     {
         $readings = [];
 
-        // Exemplo de adaptação para o JSON da Open-Meteo
-        foreach ($payload['minutely_15']['time'] ?? [] as $index => $timeStr) {
-            // Adapte conforme os campos retornados pela Open-Meteo
-            $readings[] = new Reading(
-                loggerSn: 'open-meteo-logger',
-                sensorSn: 'open-meteo-sensor',
-                type: 'Air Temperature',
-                dataType: 'CURRENT',
-                timestamp: \Carbon\CarbonImmutable::parse($timeStr, 'UTC'),
-                value: (float) ($payload['minutely_15']['temperature_2m'][$index] ?? 0),
-                unit: '°C',
-            );
+        $times = $payload['minutely_15']['time'] ?? [];
+        $temperatures = $payload['minutely_15']['temperature_2m'] ?? [];
+        $radiations = $payload['minutely_15']['shortwave_radiation'] ?? [];
+
+        $units = $payload['minutely_15_units'] ?? [];
+        $tempUnit = $units['temperature_2m'] ?? '°C';
+        $radUnit = $units['shortwave_radiation'] ?? 'W/m²';
+
+        foreach ($times as $index => $timeStr) {
+            $timestamp = \Carbon\CarbonImmutable::parse($timeStr, 'UTC');
+
+            // 1. Adiciona a leitura de Temperatura do Ar
+            if (isset($temperatures[$index])) {
+                $readings[] = new Reading(
+                    loggerSn: 'open-meteo-logger',
+                    sensorSn: 'open-meteo-temp-sensor',
+                    type: 'Air Temperature',
+                    dataType: 'CURRENT',
+                    timestamp: $timestamp,
+                    value: (float) $temperatures[$index],
+                    unit: $tempUnit,
+                );
+            }
+
+            // 2. Adiciona a leitura de Radiação Solar
+            if (isset($radiations[$index])) {
+                $readings[] = new Reading(
+                    loggerSn: 'open-meteo-logger',
+                    sensorSn: 'open-meteo-rad-sensor',
+                    type: 'Solar Radiation',
+                    dataType: 'CURRENT',
+                    timestamp: $timestamp,
+                    value: (float) $radiations[$index],
+                    unit: $radUnit,
+                );
+            }
         }
 
         return collect($readings)
-            ->groupBy(fn (Reading $r) => $r->sensorSn . '-' . $r->dataType)
+            ->groupBy(fn(Reading $r) => $r->sensorSn . '-' . $r->dataType)
             ->all();
     }
 }

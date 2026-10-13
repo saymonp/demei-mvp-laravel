@@ -12,9 +12,10 @@ final class GapFiller
      *
      * @return list<CarbonImmutable>
      */
-    public function missingBetween(CarbonImmutable $previous, CarbonImmutable $next): array
+    public function missingBetween(CarbonImmutable $previous, CarbonImmutable $next, ?int $stepSeconds = null): array
     {
-        $step = (int) config('station-quality.step_minutes') * 60;
+        // Usa o step específico da estação ou o padrão do arquivo de config
+        $step = $stepSeconds ?? ((int) config('station-quality.step_minutes') * 60);
         $cap = (int) config('station-quality.max_gap_points');
         $limit = $next->timestamp - intdiv($step, 2); // meio passo de tolerância
 
