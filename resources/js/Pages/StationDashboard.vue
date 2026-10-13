@@ -114,7 +114,7 @@ const mapStations = computed(() => {
 </script>
 
 <template>
-  <main class="dashboard" :aria-busy="busy">
+  <main class="dashboard bg-slate-200" :aria-busy="busy">
     <header class="topbar">
       <div class="brand">
         <span class="brand-icon">
