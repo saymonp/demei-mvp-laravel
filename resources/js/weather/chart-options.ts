@@ -1,5 +1,5 @@
 import type { EChartsOption, LineSeriesOption } from 'echarts';
-import { stats, timeLabel, type Measurement, type Quality } from './data';
+import { stats, timeLabel, qualityLabels, type Measurement, type Quality } from './data';
 
 export type ChartSettings = {
   kind: 'combined' | 'radiation' | 'temperature';
@@ -23,13 +23,12 @@ export function chartOptions(rows: Measurement[], settings: ChartSettings): ECha
     return [{ xAxis: timeLabel(r.timestamp) }, { xAxis: timeLabel(end) }] as [{ xAxis: string }, { xAxis: string }];
   });
 
-  // Calcula o zoom inicial para mostrar por padrão as últimas 6 horas
   let defaultStart = 0;
   if (times.length > 1) {
     const firstTime = new Date(times[0]).getTime();
     const lastTime = new Date(times[times.length - 1]).getTime();
     const totalSpan = lastTime - firstTime;
-    const sixHoursMs = 6 * 60 * 60 * 1000; // 6 horas em milissegundos
+    const sixHoursMs = 6 * 60 * 60 * 1000;
     if (totalSpan > sixHoursMs) {
       defaultStart = Math.max(0, 100 - (sixHoursMs / totalSpan) * 100);
     }
@@ -92,7 +91,33 @@ export function chartOptions(rows: Measurement[], settings: ChartSettings): ECha
       borderColor: c.border, 
       textStyle: { color: c.ink, fontSize: 12 }, 
       confine: true, 
-      valueFormatter: v => v === null ? 'Sem dados' : String(v) 
+      formatter: (params: any) => {
+        if (!Array.isArray(params) || params.length === 0) return '';
+        let html = `<b>${params[0].axisValue}</b>`;
+        params.forEach(param => {
+          const d = param.data;
+          const val = d && d.value !== null && d.value !== undefined ? `${d.value}` : 'Sem dados';
+          const quality = d ? d.quality : null;
+          const reason = d ? d.reason : null;
+          
+          let statusLabel = '';
+          let statusColor = c.ink;
+          if (quality !== null && quality !== undefined) {
+            statusLabel = qualityLabels[quality as Quality] || '';
+            if (quality === 1) statusColor = c.invalid;
+            else if (quality === 2) statusColor = c.suspect;
+          }
+
+          html += `<br/>${param.marker} <b>${param.seriesName}:</b> ${val}`;
+          if (quality !== null && quality !== 0) {
+            html += ` <span style="color: ${statusColor}; font-weight: 600;">[${statusLabel}]</span>`;
+          }
+          if ((quality === 1 || quality === 2) && reason) {
+            html += `<br/><span style="font-size: 11px; color: ${c.muted}; margin-left: 14px;">Motivo: <b>${reason}</b></span>`;
+          }
+        });
+        return html;
+      }
     },
     legend: { show: false },
     xAxis: { 
