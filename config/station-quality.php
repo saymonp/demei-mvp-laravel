@@ -37,4 +37,15 @@ return [
         'night_end_hour' => 5,        // hora local em que a noite termina
         'night_max' => 10.0,          // acima disso à noite: suspeito
     ],
+
+    'providers' => [
+        'licor' => [
+            'parser' => 'licor',
+            'step_minutes' => 5, // Licor costuma registrar a cada 5 min
+        ],
+        'open_meteo' => [
+            'parser' => 'open_meteo',
+            'step_minutes' => 15, // Open-Meteo usa blocos de 15 min
+        ],
+    ],
 ];

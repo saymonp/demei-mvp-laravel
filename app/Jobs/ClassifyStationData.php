@@ -9,6 +9,7 @@ use App\Models\StationRawData;
 use App\Services\Quality\GapFiller;
 use App\Services\Quality\PayloadReader;
 use App\Services\Quality\QualityClassifier;
+use App\Services\Quality\ProviderProfile;
 use App\Services\Quality\Reading;
 use App\Services\Quality\SeriesContext;
 use Carbon\CarbonImmutable;
@@ -48,16 +49,17 @@ class ClassifyStationData implements ShouldQueue
     public function handle(PayloadReader $reader, QualityClassifier $classifier, GapFiller $gaps): void
     {
         $raw = $this->rawData;
-        $payload = is_array($raw->payload) ? $raw->payload : (json_decode((string) $raw->payload, true) ?? []);
-        $series = $reader->seriesFrom($payload);
+        
+        // Obtém o perfil dinâmico da estação (ex: licor ou open_meteo)[cite: 2]
+        $profile = ProviderProfile::for($raw->station->provider);
+
+        $series = $reader->seriesFrom($raw);
 
         if ($series === []) {
-            Log::warning("Coleta bruta #{$raw->id}: nenhuma leitura de temperatura ou irradiação para classificar.");
-
+            Log::warning("Coleta bruta #{$raw->id} ({$profile->provider}): nenhuma leitura para classificar.");
             return;
         }
 
-        // Garante o momento atual padronizado em UTC
         $now = CarbonImmutable::now('UTC');
         $rows = [];
         $totals = [0 => 0, 1 => 0, 2 => 0, 3 => 0];
@@ -67,13 +69,13 @@ class ClassifyStationData implements ShouldQueue
 
             foreach ($readings as $reading) {
                 $previousTs = $context->previousTimestamp();
-
-                // Força o timestamp da leitura estritamente em UTC para evitar dessincronia
                 $readingTimestamp = $reading->timestamp->setTimezone('UTC');
 
-                // Lacunas entre a última leitura conhecida (do banco ou deste lote) e esta.
+                // Detecta lacunas considerando o intervalo (step) específico do provedor da estação[cite: 2]
                 if ($previousTs !== null) {
                     $from = CarbonImmutable::createFromTimestampUTC($previousTs);
+                    
+                    // Se o GapFiller aceitar o step seconds, você pode repassá-lo aqui:
                     foreach ($gaps->missingBetween($from, $readingTimestamp) as $missingAt) {
                         $missingUtc = $missingAt->setTimezone('UTC');
                         $rows[] = $this->row($raw, $reading, $missingUtc, null, $reading->unit, QualityFlag::Missing, FlagReason::Gap, $now);
@@ -100,8 +102,9 @@ class ClassifyStationData implements ShouldQueue
         });
 
         Log::info(sprintf(
-            'Coleta bruta #%d classificada: %d válidas, %d suspeitas, %d inválidas, %d lacunas.',
+            'Coleta bruta #%d (%s) classificada: %d válidas, %d suspeitas, %d inválidas, %d lacunas.',
             $raw->id,
+            $profile->provider,
             $totals[0],
             $totals[2],
             $totals[1],
@@ -114,10 +117,8 @@ class ClassifyStationData implements ShouldQueue
         Log::error("Falha ao classificar a coleta bruta #{$this->rawData->id}: {$e->getMessage()}");
     }
 
-    /** Última medição anterior e, para temperatura, as leituras válidas da janela móvel. */
     private function loadContext(int $stationId, Reading $first): SeriesContext
     {
-        // Força a conversão do timestamp de referência para UTC
         $firstTimestampUtc = $first->timestamp->setTimezone('UTC');
 
         $before = Measurement::query()
@@ -149,7 +150,6 @@ class ClassifyStationData implements ShouldQueue
         );
     }
 
-    /** O banco guarda UTC; lê o valor cru para não depender do fuso da aplicação. */
     private function unix(Measurement $m): int
     {
         return CarbonImmutable::parse($m->getRawOriginal('timestamp'), 'UTC')->timestamp;
@@ -164,7 +164,6 @@ class ClassifyStationData implements ShouldQueue
             'sensor_sn' => $r->sensorSn,
             'sensor_measurement_type' => $r->type,
             'data_type' => $r->dataType,
-            // Garante string formatada explicitamente em UTC
             'timestamp' => $at->setTimezone('UTC')->format('Y-m-d H:i:s'),
             'value' => $value,
             'unit' => $unit,

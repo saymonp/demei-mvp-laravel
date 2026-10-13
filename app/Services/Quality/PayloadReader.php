@@ -2,76 +2,71 @@
 
 namespace App\Services\Quality;
 
-use Carbon\CarbonImmutable;
-use Throwable;
+use App\Models\StationRawData;
+use App\Services\Quality\ProviderProfile;
 
-/** Filtra o payload (só temperatura e irradiação), normaliza unidades e agrupa por série. */
-final class PayloadReader
+class PayloadReader
 {
-    public function __construct(private readonly UnitNormalizer $units)
+    /**
+     * Extrai e padroniza as leituras brutas com base no perfil da estação.
+     */
+    public function seriesFrom(StationRawData $rawData): array
     {
+        $profile = ProviderProfile::for($rawData->station->provider);
+
+        $payload = is_array($rawData->payload) 
+            ? $rawData->payload 
+            : (json_decode((string) $rawData->payload, true) ?? []);
+
+        return match ($profile->provider) {
+            'licor' => $this->parseLicor($payload),
+            'open_meteo' => $this->parseOpenMeteo($payload),
+            default => throw new UnsupportedProviderException($profile->provider),
+        };
     }
 
-    /**
-     * @return array<string, list<Reading>> chave da série => leituras em ordem cronológica, sem duplicatas
-     */
-    public function seriesFrom(array $payload): array
+    private function parseLicor(array $payload): array
     {
-        $types = config('station-quality.measurement_types');
-        $series = [];
+        $readings = [];
 
         foreach ($payload['data'] ?? [] as $item) {
-            $type = $item['sensor_measurement_type'] ?? null;
-
-            if (! is_string($type) || ! isset($types[$type]) || empty($item['timestamp']) || empty($item['sensor_sn'])) {
-                continue; // Battery e demais tipos não entram nesta etapa
-            }
-
-            try {
-                $timestamp = CarbonImmutable::parse($item['timestamp'], 'UTC');
-            } catch (Throwable) {
-                continue;
-            }
-
-            $standardUnit = (string) config("station-quality.{$types[$type]}.unit");
-            $raw = $item['value'] ?? null;
-            $unit = (string) ($item['unit'] ?? '');
-            $supported = true;
-
-            if (! is_numeric($raw)) {
-                $value = null;
-                $outUnit = $standardUnit;
-            } else {
-                $converted = $this->units->normalize($type, (float) $raw, $unit);
-                if ($converted === null) {
-                    $value = (float) $raw; // guarda o valor original para auditoria
-                    $outUnit = $unit;
-                    $supported = false;
-                } else {
-                    $value = $converted;
-                    $outUnit = $standardUnit;
-                }
-            }
-
-            $reading = new Reading(
-                $type,
-                (string) ($item['data_type'] ?? 'CURRENT'),
-                (string) $item['sensor_sn'],
-                (string) ($item['logger_sn'] ?? ''),
-                $timestamp,
-                $value,
-                $outUnit,
-                $supported,
+            $readings[] = new Reading(
+                loggerSn: $item['logger_sn'] ?? 'unknown',
+                sensorSn: $item['sensor_sn'] ?? 'unknown',
+                type: $item['sensor_measurement_type'] ?? 'Unknown',
+                dataType: $item['data_type'] ?? 'CURRENT',
+                timestamp: \Carbon\CarbonImmutable::parse($item['timestamp'], 'UTC'),
+                value: (float) $item['value'],
+                unit: $item['unit'] ?? '',
             );
-
-            // A fronteira entre duas janelas pode vir repetida: a última leitura vence.
-            $series[$reading->seriesKey()][$timestamp->timestamp] = $reading;
         }
 
-        return array_map(function (array $byTimestamp) {
-            ksort($byTimestamp);
+        // Agrupa por sensor e tipo de dado
+        return collect($readings)
+            ->groupBy(fn (Reading $r) => $r->sensorSn . '-' . $r->dataType)
+            ->all();
+    }
 
-            return array_values($byTimestamp);
-        }, $series);
+    private function parseOpenMeteo(array $payload): array
+    {
+        $readings = [];
+
+        // Exemplo de adaptação para o JSON da Open-Meteo
+        foreach ($payload['minutely_15']['time'] ?? [] as $index => $timeStr) {
+            // Adapte conforme os campos retornados pela Open-Meteo
+            $readings[] = new Reading(
+                loggerSn: 'open-meteo-logger',
+                sensorSn: 'open-meteo-sensor',
+                type: 'Air Temperature',
+                dataType: 'CURRENT',
+                timestamp: \Carbon\CarbonImmutable::parse($timeStr, 'UTC'),
+                value: (float) ($payload['minutely_15']['temperature_2m'][$index] ?? 0),
+                unit: '°C',
+            );
+        }
+
+        return collect($readings)
+            ->groupBy(fn (Reading $r) => $r->sensorSn . '-' . $r->dataType)
+            ->all();
     }
 }
