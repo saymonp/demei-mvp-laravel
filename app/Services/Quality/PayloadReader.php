@@ -28,7 +28,7 @@ final class PayloadReader
             }
 
             try {
-                $timestamp = CarbonImmutable::parse($item['timestamp'])->utc();
+                $timestamp = CarbonImmutable::parse($item['timestamp'], 'UTC');
             } catch (Throwable) {
                 continue;
             }

@@ -57,7 +57,8 @@ class ClassifyStationData implements ShouldQueue
             return;
         }
 
-        $now = now();
+        // Garante o momento atual padronizado em UTC
+        $now = CarbonImmutable::now('UTC');
         $rows = [];
         $totals = [0 => 0, 1 => 0, 2 => 0, 3 => 0];
 
@@ -67,20 +68,24 @@ class ClassifyStationData implements ShouldQueue
             foreach ($readings as $reading) {
                 $previousTs = $context->previousTimestamp();
 
+                // Força o timestamp da leitura estritamente em UTC para evitar dessincronia
+                $readingTimestamp = $reading->timestamp->setTimezone('UTC');
+
                 // Lacunas entre a última leitura conhecida (do banco ou deste lote) e esta.
                 if ($previousTs !== null) {
                     $from = CarbonImmutable::createFromTimestampUTC($previousTs);
-                    foreach ($gaps->missingBetween($from, $reading->timestamp) as $missingAt) {
-                        $rows[] = $this->row($raw, $reading, $missingAt, null, $reading->unit, QualityFlag::Missing, FlagReason::Gap, $now);
+                    foreach ($gaps->missingBetween($from, $readingTimestamp) as $missingAt) {
+                        $missingUtc = $missingAt->setTimezone('UTC');
+                        $rows[] = $this->row($raw, $reading, $missingUtc, null, $reading->unit, QualityFlag::Missing, FlagReason::Gap, $now);
                         $totals[QualityFlag::Missing->value]++;
                     }
                 }
 
                 $result = $classifier->classify($reading, $context);
-                $rows[] = $this->row($raw, $reading, $reading->timestamp, $reading->value, $reading->unit, $result->flag, $result->reason, $now);
+                $rows[] = $this->row($raw, $reading, $readingTimestamp, $reading->value, $reading->unit, $result->flag, $result->reason, $now);
                 $totals[$result->flag->value]++;
 
-                $context->record($reading->timestamp->timestamp, $reading->value, $result->flag);
+                $context->record($readingTimestamp->timestamp, $reading->value, $result->flag);
             }
         }
 
@@ -112,17 +117,20 @@ class ClassifyStationData implements ShouldQueue
     /** Última medição anterior e, para temperatura, as leituras válidas da janela móvel. */
     private function loadContext(int $stationId, Reading $first): SeriesContext
     {
+        // Força a conversão do timestamp de referência para UTC
+        $firstTimestampUtc = $first->timestamp->setTimezone('UTC');
+
         $before = Measurement::query()
             ->where('station_id', $stationId)
             ->where('sensor_sn', $first->sensorSn)
             ->where('data_type', $first->dataType)
-            ->where('timestamp', '<', $first->timestamp->format('Y-m-d H:i:s'));
+            ->where('timestamp', '<', $firstTimestampUtc->format('Y-m-d H:i:s'));
 
         $previous = (clone $before)->orderByDesc('timestamp')->first(['timestamp', 'value', 'quality_flag']);
 
         $history = [];
         if ($first->type === Reading::TEMPERATURE) {
-            $windowStart = $first->timestamp->subHours((int) config('station-quality.temperature.window_hours'));
+            $windowStart = $firstTimestampUtc->subHours((int) config('station-quality.temperature.window_hours'));
 
             $history = (clone $before)
                 ->where('quality_flag', QualityFlag::Valid->value)
@@ -147,7 +155,7 @@ class ClassifyStationData implements ShouldQueue
         return CarbonImmutable::parse($m->getRawOriginal('timestamp'), 'UTC')->timestamp;
     }
 
-    private function row(StationRawData $raw, Reading $r, CarbonImmutable $at, ?float $value, string $unit, QualityFlag $flag, ?FlagReason $reason, $now): array
+    private function row(StationRawData $raw, Reading $r, CarbonImmutable $at, ?float $value, string $unit, QualityFlag $flag, ?FlagReason $reason, CarbonImmutable $now): array
     {
         return [
             'station_id' => $raw->station_id,
@@ -156,13 +164,14 @@ class ClassifyStationData implements ShouldQueue
             'sensor_sn' => $r->sensorSn,
             'sensor_measurement_type' => $r->type,
             'data_type' => $r->dataType,
-            'timestamp' => $at->format('Y-m-d H:i:s'),
+            // Garante string formatada explicitamente em UTC
+            'timestamp' => $at->setTimezone('UTC')->format('Y-m-d H:i:s'),
             'value' => $value,
             'unit' => $unit,
             'quality_flag' => $flag->value,
             'flag_reason' => $reason?->value,
-            'created_at' => $now,
-            'updated_at' => $now,
+            'created_at' => $now->format('Y-m-d H:i:s'),
+            'updated_at' => $now->format('Y-m-d H:i:s'),
         ];
     }
 }
