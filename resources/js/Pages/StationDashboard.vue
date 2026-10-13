@@ -147,7 +147,7 @@ const mapStations = computed(() => {
         <template v-if="station?.latitude != null && station?.longitude != null">{{ formatNumber(station.latitude, 2) }}°, {{ formatNumber(station.longitude, 2) }}°</template>
         <template v-if="station?.altitude != null"> · {{ station.altitude }} m acima do nível do mar</template>
       </p>
-      <div class="metrics">
+      <div class="flex p-4 mx-auto max-w-4xl gap-6 justify-center">
         <div class="metric">
           <span class="metric-icon solar">
             <Sun />
