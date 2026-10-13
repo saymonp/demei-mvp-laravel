@@ -69,7 +69,7 @@ const mapStations = computed(() => { const located = props.stations.filter(s => 
           <Download :size="14" />Exportar
         </button></div>
     </header>
-    <section class="summary">
+    <section class="">
       <h1>{{ station?.name ?? 'Nenhuma estação cadastrada' }}, Rio Grande do Sul</h1>
       <p class="summary-location"><template
           v-if="station?.latitude != null && station?.longitude != null">{{ formatNumber(station.latitude, 2) }}°,
@@ -103,13 +103,7 @@ const mapStations = computed(() => { const located = props.stations.filter(s => 
           </div>
         </div>
       </div>
-      <div class="sky-scene" aria-hidden="true">
-        <Cloud class="cloud one" />
-        <Cloud class="cloud two" />
-        <div class="sun-path" />
-        <div class="sun-orb" /><span class="sun-reading">{{ formatNumber(rs.max, 0) }} W/m²</span>
-        <div class="sky-times"><span>06:00</span><span>12:00</span><span>18:00</span></div>
-      </div>
+    
     </section>
     <section class="filterbar">
       <div class="quality-filters"><button v-for="f in filters" :key="f.label" :class="{ selected: quality === f.flag }"
