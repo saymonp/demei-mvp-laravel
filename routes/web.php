@@ -23,9 +23,12 @@ Route::get('/home', function () {
     return Inertia::render('Home');
 });
 
-Route::get('/station-dashboard/version', [StationController::class, 'classificationVersion'])
-    ->name('station-dashboard.classification-version');
-Route::get('/station-dashboard', [StationController::class, 'index']);
+Route::middleware('auth')->group(function () {
+    Route::get('/station-dashboard/version', [StationController::class, 'classificationVersion'])
+        ->name('station-dashboard.classification-version');
+    Route::get('/station-dashboard', [StationController::class, 'index'])
+        ->name('station-dashboard');
+});
 
 require __DIR__.'/reports.php';
 
