@@ -18,6 +18,7 @@ class FetchStationData implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $timeout = 60;
+
     public $tries = 3;
 
     public function __construct(
@@ -27,7 +28,7 @@ class FetchStationData implements ShouldQueue
     ) {
         $this->end = $end ?? now();
 
-        if (!$start) {
+        if (! $start) {
             $lastRecord = $station->rawData()
                 ->latest('fetched_end_at')
                 ->first();
@@ -50,7 +51,7 @@ class FetchStationData implements ShouldQueue
             'fetched_end_at' => $this->end,
         ]);
 
-        ClassifyStationData::dispatch($rawData);
+        DispatchClassificationBatch::dispatch([$rawData->id]);
 
         Log::info(
             "Dados da estação {$this->station->name} coletados com sucesso."

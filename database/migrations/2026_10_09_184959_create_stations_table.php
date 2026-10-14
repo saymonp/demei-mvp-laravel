@@ -18,8 +18,8 @@ return new class extends Migration
             $table->string('provider');
             $table->text('bearer_token')->nullable();
             $table->string('loggers')->nullable(); // Ex: "20770262,20748028"
-            $table->latitude('latitude')->nullable();
-            $table->longitude('longitude')->nullable();
+            $table->double('latitude')->nullable();
+            $table->double('longitude')->nullable();
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });

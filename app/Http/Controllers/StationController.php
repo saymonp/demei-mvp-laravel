@@ -5,11 +5,27 @@ namespace App\Http\Controllers;
 use App\Models\Measurement;
 use App\Models\Station;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 
 class StationController extends Controller
 {
+    public function classificationVersion(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'station_id' => ['required', 'integer', 'exists:stations,id'],
+            'date' => ['required', 'date_format:Y-m-d'],
+        ]);
+
+        return response()->json([
+            'batch_id' => Cache::get(
+                'weather.classified.'.(int) $validated['station_id'].'.'.$validated['date'],
+            ),
+        ]);
+    }
+
     public function index(Request $request)
     {
         $validated = $request->validate([
@@ -34,6 +50,7 @@ class StationController extends Controller
                 'quality_flag' => $m->quality_flag->value,
                 'flag_reason' => $m->flag_reason,
             ]);
+
         return Inertia::render('StationDashboard', [
             'measurements' => $measurements,
             'stations' => $stations,

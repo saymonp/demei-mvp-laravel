@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { router } from '@inertiajs/vue3';
 import VChart from 'vue-echarts';
 import { use } from 'echarts/core';
@@ -35,6 +35,12 @@ type Station = { id: number; name: string; provider: string; latitude?: number |
 
 const props = defineProps<{ measurements: Measurement[]; stations: Station[]; selectedStationId: number | null; selectedDate: string }>();
 
+type ClassificationEvent = { station_ids: number[]; date: string; batch_id: string };
+type EchoChannel = { listen(event: string, callback: (payload: ClassificationEvent) => void): EchoChannel };
+type EchoClient = { channel(name: string): EchoChannel; leave(name: string): void };
+
+const CLASSIFICATION_CHECK_INTERVAL = 35 * 60 * 1000;
+
 const stationId = ref(props.selectedStationId); 
 const date = ref(props.selectedDate); 
 const quality = ref<Quality | null>(null); 
@@ -45,13 +51,100 @@ const temperatureMax = ref(60);
 const view = ref('overview'); 
 const highlighted = ref(''); 
 const busy = ref(false);
+const lastBatchId = ref<string | null>(null);
+let hasLoadedVersion = false;
+let isCheckingVersion = false;
+let pollTimer: number | undefined;
+let echo: EchoClient | undefined;
 
 watch(() => props.selectedStationId, v => stationId.value = v); 
 watch(() => props.selectedDate, v => date.value = v);
 
 function reload() { 
-  router.get('/station-dashboard', { station_id: stationId.value, date: date.value }, { preserveState: true, preserveScroll: true, replace: true, onStart: () => busy.value = true, onFinish: () => busy.value = false }); 
+  router.get('/station-dashboard', { station_id: stationId.value, date: date.value }, { preserveState: true, replace: true, onStart: () => busy.value = true, onFinish: () => busy.value = false });
 }
+
+function reloadMeasurements(): void {
+  router.reload({
+    only: ['measurements', 'stations'],
+    onStart: () => busy.value = true,
+    onFinish: () => busy.value = false,
+  });
+}
+
+function handleMeasurementsClassified(event: ClassificationEvent): void {
+  if (
+    event.date !== date.value
+    || stationId.value === null
+    || !event.station_ids.includes(stationId.value)
+    || event.batch_id === lastBatchId.value
+  ) {
+    return;
+  }
+
+  lastBatchId.value = event.batch_id;
+  hasLoadedVersion = true;
+  reloadMeasurements();
+}
+
+async function checkClassificationVersion(): Promise<void> {
+  if (stationId.value === null || document.visibilityState === 'hidden' || isCheckingVersion) {
+    return;
+  }
+
+  isCheckingVersion = true;
+  const query = new URLSearchParams({
+    station_id: String(stationId.value),
+    date: date.value,
+  });
+
+  try {
+    const response = await fetch(`/station-dashboard/version?${query}`, {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      throw new Error(`Classification version request failed with status ${response.status}.`);
+    }
+
+    const result = await response.json() as { batch_id: string | null };
+
+    if (hasLoadedVersion && result.batch_id && result.batch_id !== lastBatchId.value) {
+      reloadMeasurements();
+    }
+
+    lastBatchId.value = result.batch_id;
+    hasLoadedVersion = true;
+  } catch (error) {
+    console.error('Unable to check for newly classified measurements.', error);
+  } finally {
+    isCheckingVersion = false;
+  }
+}
+
+onMounted(() => {
+  echo = (window as Window & { Echo?: EchoClient }).Echo;
+
+  if (echo) {
+    echo.channel('weather.measurements')
+      .listen('.measurements.classified', handleMeasurementsClassified);
+  } else {
+    void checkClassificationVersion();
+    pollTimer = window.setInterval(
+      () => void checkClassificationVersion(),
+      CLASSIFICATION_CHECK_INTERVAL,
+    );
+  }
+});
+
+onBeforeUnmount(() => {
+  if (pollTimer !== undefined) {
+    window.clearInterval(pollTimer);
+  }
+
+  echo?.leave('weather.measurements');
+});
 
 function openHorizon() {
   window.open('/horizon/dashboard', '_blank');
@@ -218,7 +311,7 @@ const mapStations = computed(() => {
             </div>
             <div class="series-legend"><span><i class="series-mark" />Irradiação</span><span><i class="series-mark temp" />Temperatura</span></div>
           </div>
-          <VChart class="weather-chart" :option="combinedOption" autoresize />
+          <VChart class="weather-chart" :option="combinedOption" :update-options="{ notMerge: false }" autoresize />
         </section>
         <aside class="panel attention">
           <h2>Precisa de atenção</h2>
@@ -247,7 +340,7 @@ const mapStations = computed(() => {
             </div>
             <div class="series-legend"><span><i class="series-mark" />Irradiação</span></div>
           </div>
-          <VChart class="weather-chart" :option="radiationOption" autoresize />
+          <VChart class="weather-chart" :option="radiationOption" :update-options="{ notMerge: false }" autoresize />
         </section>
         <section class="panel chart-panel">
           <div class="panel-heading">
@@ -257,7 +350,7 @@ const mapStations = computed(() => {
             </div>
             <div class="series-legend"><span><i class="series-mark temp" />Temperatura</span></div>
           </div>
-          <VChart class="weather-chart" :option="temperatureOption" autoresize />
+          <VChart class="weather-chart" :option="temperatureOption" :update-options="{ notMerge: false }" autoresize />
         </section>
       </div>
 

@@ -8,11 +8,12 @@ use App\Models\Measurement;
 use App\Models\StationRawData;
 use App\Services\Quality\GapFiller;
 use App\Services\Quality\PayloadReader;
-use App\Services\Quality\QualityClassifier;
 use App\Services\Quality\ProviderProfile;
+use App\Services\Quality\QualityClassifier;
 use App\Services\Quality\Reading;
 use App\Services\Quality\SeriesContext;
 use Carbon\CarbonImmutable;
+use Illuminate\Bus\Batchable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -25,16 +26,17 @@ use Throwable;
 
 class ClassifyStationData implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Batchable, Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $timeout = 120;
+
     public $tries = 3;
+
     public $backoff = [30, 120];
+
     public $deleteWhenMissingModels = true;
 
-    public function __construct(public StationRawData $rawData)
-    {
-    }
+    public function __construct(public StationRawData $rawData) {}
 
     /** Uma estação por vez: a classificação depende da ordem cronológica das coletas. */
     public function middleware(): array
@@ -49,7 +51,7 @@ class ClassifyStationData implements ShouldQueue
     public function handle(PayloadReader $reader, QualityClassifier $classifier, GapFiller $gaps): void
     {
         $raw = $this->rawData;
-        
+
         // Obtém o perfil dinâmico da estação (ex: licor ou open_meteo)[cite: 2]
         $profile = ProviderProfile::for($raw->station->provider);
 
@@ -57,6 +59,7 @@ class ClassifyStationData implements ShouldQueue
 
         if ($series === []) {
             Log::warning("Coleta bruta #{$raw->id} ({$profile->provider}): nenhuma leitura para classificar.");
+
             return;
         }
 
@@ -74,7 +77,7 @@ class ClassifyStationData implements ShouldQueue
                 // Detecta lacunas considerando o intervalo (step) específico do provedor da estação[cite: 2]
                 if ($previousTs !== null) {
                     $from = CarbonImmutable::createFromTimestampUTC($previousTs);
-                    
+
                     foreach ($gaps->missingBetween($from, $readingTimestamp, $profile->stepSeconds()) as $missingAt) {
                         $missingUtc = $missingAt->setTimezone('UTC');
                         $rows[] = $this->row($raw, $reading, $missingUtc, null, $reading->unit, QualityFlag::Missing, FlagReason::Gap, $now);
