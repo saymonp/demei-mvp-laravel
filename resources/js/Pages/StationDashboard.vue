@@ -379,10 +379,8 @@ const mapStations = computed(() => {
   <main class="dashboard bg-slate-200" :aria-busy="busy">
     <header class="topbar">
       <div class="brand">
-        <span class="brand-icon">
-          <Sun :size="26" />
-        </span>
-        Estação meteorológica
+        <img src="/images/novalogodemei.png" alt="DEMEI" class="h-12 w-auto object-contain" />
+        DashBoard Meteorológica
       </div>
       
       <!-- Navegação com abas e link para o Horizon -->
