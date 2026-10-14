@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { router } from '@inertiajs/vue3';
+import { Link, router } from '@inertiajs/vue3';
 import VChart from 'vue-echarts';
 import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
@@ -208,6 +208,12 @@ function scheduleReportPolling(): void {
 }
 
 async function loadReports(): Promise<void> {
+  if (!props.canGenerateReports) {
+    reports.value = [];
+
+    return;
+  }
+
   const requestId = ++reportRequestId;
 
   if (stationId.value === null) {
@@ -296,11 +302,14 @@ async function generateReport(): Promise<void> {
 
 function openDocuments(): void {
   documentsOpen.value = true;
-  void loadReports();
+
+  if (props.canGenerateReports) {
+    void loadReports();
+  }
 }
 
 watch([stationId, date], () => {
-  if (documentsOpen.value) {
+  if (documentsOpen.value && props.canGenerateReports) {
     void loadReports();
   }
 });
@@ -388,7 +397,7 @@ const mapStations = computed(() => {
         <button class="export-button" @click="exportData">
           <Download :size="14" />Exportar
         </button>
-        <button v-if="canGenerateReports" class="export-button" @click="openDocuments" :disabled="stationId === null">
+        <button class="export-button" @click="openDocuments" :disabled="stationId === null">
           <Download :size="14" />Documentos
         </button>
       </div>
@@ -589,36 +598,42 @@ const mapStations = computed(() => {
     </section>
 
     <div v-if="documentsOpen" class="documents-backdrop" @click.self="closeDocuments">
-      <section class="panel documents-dialog" role="dialog" aria-modal="true" aria-labelledby="documents-title">
+      <section class="panel documents-dialog p-5" role="dialog" aria-modal="true" aria-labelledby="documents-title">
         <div class="panel-heading">
           <div>
-            <h2 id="documents-title">Gerar documentos</h2>
-            <p>{{ station?.name }} · {{ date.split('-').reverse().join('/') }}</p>
+            <h2 id="documents-title">{{ canGenerateReports ? 'Gerar documentos' : 'Acesse os documentos' }}</h2>
+            <p v-if="canGenerateReports">{{ station?.name }} · {{ date.split('-').reverse().join('/') }}</p>
           </div>
           <button class="documents-close" aria-label="Fechar" @click="closeDocuments">×</button>
         </div>
-        <div class="documents-formats">
+        <div v-if="canGenerateReports" class="documents-formats">
           <label v-for="format in reportFormats" :key="format.value" :class="['documents-format', { selected: reportFormat === format.value }]">
             <input type="radio" name="report-format" :value="format.value" v-model="reportFormat" />
             <strong>{{ format.label }}</strong><small>{{ format.detail }}</small>
           </label>
         </div>
-        <label v-if="reportFormat === 'pdf'" class="documents-notes">Observações do operador (opcional)
+        <label v-if="canGenerateReports && reportFormat === 'pdf'" class="documents-notes">Observações do operador (opcional)
           <textarea v-model="reportNotes" rows="3" maxlength="2000" placeholder="Ex.: sensor de radiação limpo às 10:00"></textarea>
         </label>
-        <p v-if="reportError" class="documents-error" role="alert">{{ reportError }}</p>
-        <button class="export-button" :disabled="requestingReport" @click="generateReport">
+        <div v-if="!canGenerateReports" class="documents-login">
+          <p>Entre na sua conta para gerar PDF, Excel e CSV e acessar os documentos já criados.</p>
+          <Link class="export-button" href="/login">Entrar para acessar</Link>
+        </div>
+        <template v-else>
+          <p v-if="reportError" class="documents-error" role="alert">{{ reportError }}</p>
+          <button class="export-button" :disabled="requestingReport || stationId === null" @click="generateReport">
           {{ requestingReport ? 'Enviando…' : 'Gerar documento' }}
-        </button>
-        <h3 class="documents-subtitle">Documentos desta estação e data</h3>
-        <p v-if="!reports.length" class="empty">Nenhum documento gerado ainda.</p>
-        <ul class="documents-list">
-          <li v-for="report in reports" :key="report.id">
-            <span>{{ reportFormats.find(format => format.value === report.format)?.label }}</span>
-            <span :class="['badge', report.status === 'ready' ? 'valid' : report.status === 'failed' ? 'invalid' : 'suspect']">{{ reportStatus[report.status] }}</span>
-            <a v-if="report.download_url" :href="report.download_url">Baixar</a>
-          </li>
-        </ul>
+          </button>
+          <h3 class="documents-subtitle">Documentos desta estação e data</h3>
+          <p v-if="!reports.length" class="empty">Nenhum documento gerado ainda.</p>
+          <ul class="documents-list">
+            <li v-for="report in reports" :key="report.id">
+              <span>{{ reportFormats.find(format => format.value === report.format)?.label }}</span>
+              <span :class="['badge', report.status === 'ready' ? 'valid' : report.status === 'failed' ? 'invalid' : 'suspect']">{{ reportStatus[report.status] }}</span>
+              <a v-if="report.download_url" :href="report.download_url">Baixar</a>
+            </li>
+          </ul>
+        </template>
       </section>
     </div>
   </main>
