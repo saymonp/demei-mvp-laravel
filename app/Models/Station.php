@@ -9,7 +9,7 @@ class Station extends Model
 {
     protected $guarded = [];
 
-     protected $fillable = [
+    protected $fillable = [
         'name',
         'api_url',
         'provider',
@@ -17,6 +17,7 @@ class Station extends Model
         'loggers',
         'latitude',
         'longitude',
+        'altitude',
         'is_active',
     ];
 

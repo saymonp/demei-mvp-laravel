@@ -33,7 +33,14 @@ class StationController extends Controller
             'date' => ['nullable', 'date_format:Y-m-d'],
         ]);
         // Keep the application's existing station visibility/authorization scopes.
-        $stations = Station::query()->orderBy('name')->get(['id', 'name', 'provider']);
+        $stations = Station::query()->orderBy('name')->get([
+            'id',
+            'name',
+            'provider',
+            'latitude',
+            'longitude',
+            'altitude',
+        ]);
         $stationId = isset($validated['station_id'])
             ? (int) $validated['station_id'] : $stations->first()?->id;
         $date = $validated['date'] ?? CarbonImmutable::now('America/Sao_Paulo')->format('Y-m-d');
@@ -56,6 +63,7 @@ class StationController extends Controller
             'stations' => $stations,
             'selectedStationId' => $stationId,
             'selectedDate' => $date,
+            'canGenerateReports' => $request->user() !== null,
         ]);
     }
 }

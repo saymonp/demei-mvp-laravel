@@ -33,7 +33,13 @@ const RefreshCw = makeIcon({ tag: 'path', attrs: { d: 'M20 7v5h-5M4 17v-5h5' } }
 
 type Station = { id: number; name: string; provider: string; latitude?: number | null; longitude?: number | null; altitude?: number | null; valid_percentage?: number | null };
 
-const props = defineProps<{ measurements: Measurement[]; stations: Station[]; selectedStationId: number | null; selectedDate: string }>();
+const props = defineProps<{
+  measurements: Measurement[];
+  stations: Station[];
+  selectedStationId: number | null;
+  selectedDate: string;
+  canGenerateReports: boolean;
+}>();
 
 type ClassificationEvent = { station_ids: number[]; date: string; batch_id: string };
 type EchoChannel = { listen(event: string, callback: (payload: ClassificationEvent) => void): EchoChannel };
@@ -150,6 +156,157 @@ function openHorizon() {
   window.open('/horizon/dashboard', '_blank');
 }
 
+type ReportFormat = 'pdf' | 'xlsx' | 'csv';
+type StationReport = {
+  id: number;
+  format: ReportFormat;
+  status: 'pending' | 'processing' | 'ready' | 'failed';
+  reference_date: string;
+  error: string | null;
+  download_url: string | null;
+  created_at: string | null;
+};
+
+const reportFormats: { value: ReportFormat; label: string; detail: string }[] = [
+  { value: 'pdf', label: 'Relatório PDF', detail: 'KPIs, controle de qualidade, anomalias e notas' },
+  { value: 'xlsx', label: 'Planilha Excel', detail: 'Dados padronizados e estatísticas em 2 abas' },
+  { value: 'csv', label: 'CSV', detail: 'Dados padronizados e QC' },
+];
+const reportStatus = { pending: 'Na fila', processing: 'Gerando', ready: 'Pronto', failed: 'Falhou' } as const;
+const documentsOpen = ref(false);
+const reportFormat = ref<ReportFormat>('pdf');
+const reportNotes = ref('');
+const reports = ref<StationReport[]>([]);
+const reportError = ref('');
+const requestingReport = ref(false);
+let reportTimer: number | undefined;
+let reportRequestId = 0;
+
+function closeDocuments(): void {
+  documentsOpen.value = false;
+  reportRequestId++;
+  window.clearTimeout(reportTimer);
+}
+
+function reportHeaders(): Record<string, string> {
+  const token = document.cookie.split('; ').find(cookie => cookie.startsWith('XSRF-TOKEN='))?.split('=')[1];
+
+  return {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
+    ...(token ? { 'X-XSRF-TOKEN': decodeURIComponent(token) } : {}),
+  };
+}
+
+function scheduleReportPolling(): void {
+  window.clearTimeout(reportTimer);
+
+  if (documentsOpen.value && reports.value.some(report => ['pending', 'processing'].includes(report.status))) {
+    reportTimer = window.setTimeout(() => void loadReports(), 3000);
+  }
+}
+
+async function loadReports(): Promise<void> {
+  const requestId = ++reportRequestId;
+
+  if (stationId.value === null) {
+    reports.value = [];
+    window.clearTimeout(reportTimer);
+
+    return;
+  }
+
+  const query = new URLSearchParams({
+    station_id: String(stationId.value),
+    date: date.value,
+  });
+
+  try {
+    const response = await fetch(`/station-dashboard/reports?${query}`, {
+      headers: reportHeaders(),
+      cache: 'no-store',
+      credentials: 'same-origin',
+    });
+
+    if (requestId !== reportRequestId) {
+      return;
+    }
+
+    if (!response.ok) {
+      throw new Error(`Request failed with status ${response.status}.`);
+    }
+
+    reports.value = await response.json() as StationReport[];
+    reportError.value = '';
+  } catch {
+    if (requestId === reportRequestId) {
+      reportError.value = 'Não foi possível carregar os documentos. Tente novamente.';
+    }
+  } finally {
+    if (requestId === reportRequestId) {
+      scheduleReportPolling();
+    }
+  }
+}
+
+async function generateReport(): Promise<void> {
+  if (stationId.value === null || requestingReport.value) {
+    return;
+  }
+
+  requestingReport.value = true;
+  reportRequestId++;
+  window.clearTimeout(reportTimer);
+  reportError.value = '';
+
+  try {
+    const response = await fetch('/station-dashboard/reports', {
+      method: 'POST',
+      headers: reportHeaders(),
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        station_id: stationId.value,
+        date: date.value,
+        format: reportFormat.value,
+        notes: reportNotes.value || null,
+      }),
+    });
+
+    if (!response.ok) {
+      const result = await response.json().catch(() => null) as {
+        message?: string;
+        errors?: Record<string, string[]>;
+      } | null;
+      const validationMessage = Object.values(result?.errors ?? {}).flat()[0];
+      throw new Error(validationMessage ?? result?.message ?? `Request failed with status ${response.status}.`);
+    }
+
+    reports.value = [await response.json() as StationReport, ...reports.value];
+    reportNotes.value = '';
+    scheduleReportPolling();
+  } catch (error: unknown) {
+    reportError.value = error instanceof Error
+      ? error.message
+      : 'Não foi possível solicitar o documento. Verifique os dados e tente novamente.';
+  } finally {
+    requestingReport.value = false;
+  }
+}
+
+function openDocuments(): void {
+  documentsOpen.value = true;
+  void loadReports();
+}
+
+watch([stationId, date], () => {
+  if (documentsOpen.value) {
+    void loadReports();
+  }
+});
+
+onBeforeUnmount(() => window.clearTimeout(reportTimer));
+
 const station = computed(() => props.stations.find(s => s.id === stationId.value));
 const rad = computed(() => props.measurements.filter(r => r.sensor_measurement_type === 'Solar Radiation'));
 const temp = computed(() => props.measurements.filter(r => r.sensor_measurement_type === 'Air Temperature'));
@@ -230,6 +387,9 @@ const mapStations = computed(() => {
         <input type="date" class="date-select" v-model="date" @change="reload" :disabled="busy" aria-label="Data das medições" />
         <button class="export-button" @click="exportData">
           <Download :size="14" />Exportar
+        </button>
+        <button v-if="canGenerateReports" class="export-button" @click="openDocuments" :disabled="stationId === null">
+          <Download :size="14" />Documentos
         </button>
       </div>
     </header>
@@ -427,5 +587,39 @@ const mapStations = computed(() => {
         <button @click="view = view === 'logs' ? 'overview' : 'logs'">{{ view === 'logs' ? 'Voltar ao resumo' : 'Ver todas as medições' }} →</button>
       </div>
     </section>
+
+    <div v-if="documentsOpen" class="documents-backdrop" @click.self="closeDocuments">
+      <section class="panel documents-dialog" role="dialog" aria-modal="true" aria-labelledby="documents-title">
+        <div class="panel-heading">
+          <div>
+            <h2 id="documents-title">Gerar documentos</h2>
+            <p>{{ station?.name }} · {{ date.split('-').reverse().join('/') }}</p>
+          </div>
+          <button class="documents-close" aria-label="Fechar" @click="closeDocuments">×</button>
+        </div>
+        <div class="documents-formats">
+          <label v-for="format in reportFormats" :key="format.value" :class="['documents-format', { selected: reportFormat === format.value }]">
+            <input type="radio" name="report-format" :value="format.value" v-model="reportFormat" />
+            <strong>{{ format.label }}</strong><small>{{ format.detail }}</small>
+          </label>
+        </div>
+        <label v-if="reportFormat === 'pdf'" class="documents-notes">Observações do operador (opcional)
+          <textarea v-model="reportNotes" rows="3" maxlength="2000" placeholder="Ex.: sensor de radiação limpo às 10:00"></textarea>
+        </label>
+        <p v-if="reportError" class="documents-error" role="alert">{{ reportError }}</p>
+        <button class="export-button" :disabled="requestingReport" @click="generateReport">
+          {{ requestingReport ? 'Enviando…' : 'Gerar documento' }}
+        </button>
+        <h3 class="documents-subtitle">Documentos desta estação e data</h3>
+        <p v-if="!reports.length" class="empty">Nenhum documento gerado ainda.</p>
+        <ul class="documents-list">
+          <li v-for="report in reports" :key="report.id">
+            <span>{{ reportFormats.find(format => format.value === report.format)?.label }}</span>
+            <span :class="['badge', report.status === 'ready' ? 'valid' : report.status === 'failed' ? 'invalid' : 'suspect']">{{ reportStatus[report.status] }}</span>
+            <a v-if="report.download_url" :href="report.download_url">Baixar</a>
+          </li>
+        </ul>
+      </section>
+    </div>
   </main>
 </template>

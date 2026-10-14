@@ -1,3 +1,5 @@
+@import '/resources/css/documents.css';
+
 :root {
  --background:oklch(.965 .012 262);--foreground:oklch(.27 .065 265);--primary:oklch(.54 .21 267);--primary-foreground:oklch(1 0 0);--secondary:oklch(.93 .018 262);--muted:oklch(.967 .011 262);--muted-foreground:oklch(.56 .035 263);--accent:oklch(.94 .025 263);--border:oklch(.92 .017 261);--card:oklch(1 0 0);--valid:oklch(.62 .16 153);--suspect:oklch(.74 .16 85);--invalid:oklch(.59 .21 26);--gap:oklch(.72 .02 251);--radiation:oklch(.54 .23 285);--temperature:oklch(.65 .18 242);
  --sky:oklch(.86 .07 245);--sky-end:oklch(.95 .06 87);--sun:oklch(.81 .17 75);--map:oklch(.94 .025 229);--map-grid:oklch(.89 .027 229);--valid-bg:oklch(.94 .05 153);--suspect-bg:oklch(.95 .08 90);--invalid-bg:oklch(.93 .055 24);--gap-bg:oklch(.93 .015 251);--shadow:0 2px 8px oklch(.3 .03 260 / .025);

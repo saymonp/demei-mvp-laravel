@@ -27,6 +27,8 @@ Route::get('/station-dashboard/version', [StationController::class, 'classificat
     ->name('station-dashboard.classification-version');
 Route::get('/station-dashboard', [StationController::class, 'index']);
 
+require __DIR__.'/reports.php';
+
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

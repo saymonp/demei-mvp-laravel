@@ -1,0 +1,15 @@
+.documents-backdrop { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px; background: rgb(15 23 42 / .45); }
+.documents-dialog { width: min(520px, 100%); max-height: 90vh; overflow-y: auto; display: grid; gap: 12px; }
+.documents-close { font-size: 22px; line-height: 1; padding: 4px 8px; }
+.documents-formats { display: grid; gap: 8px; }
+.documents-format { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; padding: 10px 12px; border: 1px solid #d5dde6; border-radius: 12px; cursor: pointer; }
+.documents-format input { grid-row: span 2; align-self: center; }
+.documents-format small { opacity: .7; }
+.documents-format.selected { border-color: #2f6fb3; }
+.documents-notes { display: grid; gap: 6px; font-size: 13px; }
+.documents-notes textarea { border: 1px solid #d5dde6; border-radius: 10px; padding: 8px; font: inherit; }
+.documents-error { color: #b42318; font-size: 13px; }
+.documents-subtitle { font-size: 13px; font-weight: 700; margin-top: 4px; }
+.documents-list { display: grid; gap: 6px; padding: 0; list-style: none; }
+.documents-list li { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.documents-list li a { margin-left: auto; font-weight: 700; text-decoration: underline; }
