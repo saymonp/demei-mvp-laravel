@@ -1,3 +1,9 @@
+
+## Prévia da StationDashboard
+
+![Captura da tela StationDashboard](docs/images/station-dashboard.png)
+
+### Comandos úteis:
 docker compose up -d --build
 
 php artisan serve
