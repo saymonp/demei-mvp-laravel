@@ -1,5 +1,5 @@
 
-## Prévia da StationDashboard
+## Dashboard
 
 ![Captura da tela StationDashboard](docs/images/station-dashboard.png)
 
@@ -10,6 +10,8 @@
 ### Relatório PDF
 
 ![Prévia do relatório diário em PDF](docs/images/station-report-pdf.png)
+
+[Projeto no Figma](https://www.figma.com/design/lF5Fm3yNbVcWsoOaG9Ljbf/Untitled?node-id=1-2&t=fpFmr2RFByrE1oDz-1)
 
 ### Comandos úteis:
 docker compose up -d --build
@@ -40,24 +42,17 @@ testar job de coleta:
 docker exec -it demei-app php artisan tinker
 App\Jobs\FetchStationData::dispatch(App\Models\Station::first());
 
-http://localhost:8000/horizon
-
-
 Alterações nos jobs:
 docker exec -it demei-app php artisan horizon:terminate
 
-
-
-
 criar tabelas:
 create_measurements_table
-
 
 migrate fresh:
 docker exec -it demei-app php artisan migrate:refresh
 docker exec -it demei-app php artisan migrate:fresh --seed
 
-executar o sjobs manualmente:
+executar os jobs manualmente:
 docker exec -it demei-app php artisan tinker
 App\Models\Station::where('is_active', true)->get()->each(
     fn ($station) => App\Jobs\FetchStationData::dispatch($station)
