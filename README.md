@@ -3,6 +3,14 @@
 
 ![Captura da tela StationDashboard](docs/images/station-dashboard.png)
 
+### Geração de documentos
+
+![Modal de geração de documentos da StationDashboard](docs/images/station-dashboard-documents.png)
+
+### Relatório PDF
+
+![Prévia do relatório diário em PDF](docs/images/station-report-pdf.png)
+
 ### Comandos úteis:
 docker compose up -d --build
 
