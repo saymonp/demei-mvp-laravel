@@ -22,6 +22,8 @@ class StationSeeder extends Seeder
                 'provider' => 'licor',
                 'bearer_token' => env('LICOR_BEARER_TOKEN'),
                 'loggers' => env('LICOR_LOGGERS', '20770262,20748028'),
+                'latitude' => env('LICOR_LATITUDE', '-28.39'),
+                'longitude' => env('LICOR_LONGITUDE', '-53.95'),
                 'is_active' => true,
             ]
         );
@@ -41,4 +43,4 @@ class StationSeeder extends Seeder
             ]
         );
     }
-}https://api.open-meteo.com/v1/forecast?latitude=-28.30&longitude=-54.26&minutely_15=temperature_2m,shortwave_radiation&past_minutely_15=2&forecast_minutely_15=0&timezone=America%2FSao_Paulo
+}
