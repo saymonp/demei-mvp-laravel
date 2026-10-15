@@ -15,21 +15,30 @@
 
 ### Rodar o Projeto
 1 - Requisitos: Docker e Node instalados
+
 2 - Variáveis de Ambiente com .env
+
 3 - composer install --ignore-platform-reqs
+
 4 - docker compose up -d --build
+
 5 - npm install
+
 6 - docker exec -it demei-app php artisan migrate
+
 7 - docker exec -it demei-app php artisan db:seed --class=StationSeeder
+
 8 - npm run dev  
-9 - Obter os primeiros doados => executar os jobs manualmente:
+
+9 - Obter os primeiros dados => executar os jobs manualmente:
+
 docker exec -it demei-app php artisan tinker
 
+```
 App\Models\Station::where('is_active', true)->get()->each(
     fn ($station) => App\Jobs\FetchStationData::dispatch($station)
 );
-
-Acessar em http://0.0.0.0:8000
+```
 ### Comandos úteis:
 composer install --ignore-platform-reqs
 docker exec -it demei-app composer install
