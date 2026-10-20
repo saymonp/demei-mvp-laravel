@@ -18,7 +18,11 @@
 
 2 - Variáveis de Ambiente com .env
 
-3 - composer install --ignore-platform-reqs
+3 - docker exec -it demei-app composer install 
+
+ou 
+
+composer install --ignore-platform-reqs
 
 4 - docker compose up -d --build
 
@@ -30,7 +34,13 @@
 
 8 - npm run dev  
 
-9 - Obter os primeiros dados => executar os jobs manualmente:
+9 - rodar seed
+
+docker exec -it demei-app php artisan tinker scripts/seed.php
+
+ou 
+
+Executar os jobs manualmente:
 
 docker exec -it demei-app php artisan tinker
 
@@ -39,52 +49,7 @@ App\Models\Station::where('is_active', true)->get()->each(
     fn ($station) => App\Jobs\FetchStationData::dispatch($station)
 );
 ```
-### Comandos úteis:
-composer install --ignore-platform-reqs
-docker exec -it demei-app composer install
-docker compose up -d --build
 
-php artisan serve
-npm run dev  
-npm run build
-
-docker exec -it demei-app php artisan make:model Station -m
-docker exec -it demei-app php artisan make:model StationRawData -m
-
-docker exec -it demei-app php artisan migrate
-
-docker exec -it demei-app php artisan make:job FetchStationData
-docker exec -it demei-app php artisan make:job ClassifyStationData
-
-docker exec -it demei-app php artisan make:seeder StationSeeder
-
-
-rodar o seeder: 
-docker exec -it demei-app php artisan db:seed --class=StationSeeder
-
-docker exec -it demei-app php artisan tinker
-// Dentro do tinker, digite:
-App\Models\Station::all();
-
-testar job de coleta:
-docker exec -it demei-app php artisan tinker
-App\Jobs\FetchStationData::dispatch(App\Models\Station::first());
-
-Alterações nos jobs:
-docker exec -it demei-app php artisan horizon:terminate
-
-criar tabelas:
-create_measurements_table
-
-migrate fresh:
-docker exec -it demei-app php artisan migrate:refresh
-docker exec -it demei-app php artisan migrate:fresh --seed
-
-executar os jobs manualmente:
-docker exec -it demei-app php artisan tinker
-App\Models\Station::where('is_active', true)->get()->each(
-    fn ($station) => App\Jobs\FetchStationData::dispatch($station)
-);
 <p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
 <p align="center">
@@ -143,3 +108,50 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+
+### Comandos úteis:
+composer install --ignore-platform-reqs
+docker exec -it demei-app composer install
+docker compose up -d --build
+
+php artisan serve
+npm run dev  
+npm run build
+
+docker exec -it demei-app php artisan make:model Station -m
+docker exec -it demei-app php artisan make:model StationRawData -m
+
+docker exec -it demei-app php artisan migrate
+
+docker exec -it demei-app php artisan make:job FetchStationData
+docker exec -it demei-app php artisan make:job ClassifyStationData
+
+docker exec -it demei-app php artisan make:seeder StationSeeder
+
+
+rodar o seeder: 
+docker exec -it demei-app php artisan db:seed --class=StationSeeder
+
+docker exec -it demei-app php artisan tinker
+// Dentro do tinker, digite:
+App\Models\Station::all();
+
+testar job de coleta:
+docker exec -it demei-app php artisan tinker
+App\Jobs\FetchStationData::dispatch(App\Models\Station::first());
+
+Alterações nos jobs:
+docker exec -it demei-app php artisan horizon:terminate
+
+criar tabelas:
+create_measurements_table
+
+migrate fresh:
+docker exec -it demei-app php artisan migrate:refresh
+docker exec -it demei-app php artisan migrate:fresh --seed
+
+executar os jobs manualmente:
+docker exec -it demei-app php artisan tinker
+App\Models\Station::where('is_active', true)->get()->each(
+    fn ($station) => App\Jobs\FetchStationData::dispatch($station)
+);
