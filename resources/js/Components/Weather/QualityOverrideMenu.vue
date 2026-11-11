@@ -3,14 +3,19 @@ import { PenLine, Undo2 } from '@lucide/vue';
 import { qualityLabels, type Quality } from '../../weather/data';
 import QualityBadge from './QualityBadge.vue';
 
-defineProps<{ current: Quality; audited?: boolean }>();
+defineProps<{ current: Quality; audited?: boolean; compact?: boolean }>();
 const emit = defineEmits<{ change: [flag: Quality]; reset: [] }>();
 </script>
 
 <template>
   <details class="relative inline-block [&_summary::-webkit-details-marker]:hidden">
-    <summary class="flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-[var(--primary)] hover:bg-[var(--accent)]">
-      <PenLine :size="12" /> Alterar Qualidade
+    <summary
+      class="flex cursor-pointer list-none items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-[var(--primary)] hover:bg-[var(--accent)]"
+      :aria-label="compact ? 'Alterar qualidade' : undefined"
+      :title="compact ? 'Alterar qualidade' : undefined"
+    >
+      <PenLine :size="12" />
+      <span v-if="!compact">Alterar Qualidade</span>
     </summary>
     <div class="absolute right-0 z-20 mt-1 w-44 rounded-xl border border-[var(--border)] bg-[var(--card)] p-1 shadow-xl">
       <button v-for="(l, f) in qualityLabels" :key="l" type="button" :disabled="f === current"

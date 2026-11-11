@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { router } from '@inertiajs/vue3';
+import { Link, router } from '@inertiajs/vue3';
 import VChart from 'vue-echarts';
 import '../../css/weather-dashboard.css';
 import { use } from 'echarts/core';
@@ -36,7 +36,14 @@ const props = withDefaults(defineProps<{
   seriesB?: Record<number, Measurement[]>;
   overrides?: OverrideMap;
   canAudit?: boolean;
-}>(), { series: () => ({}), seriesB: () => ({}), overrides: () => ({}), canAudit: true });
+  canGenerateReports?: boolean;
+  selectedDashboardStationId?: number | null;
+  selectedDashboardDate?: string;
+  embedded?: boolean;
+}>(), {
+  series: () => ({}), seriesB: () => ({}), overrides: () => ({}), canAudit: true,
+  canGenerateReports: false, selectedDashboardStationId: null, selectedDashboardDate: undefined, embedded: false,
+});
 
 const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
 const selectedIds = ref<number[]>(props.selectedStationIds?.length ? props.selectedStationIds : props.stations.slice(0, 3).map(s => s.id));
@@ -50,8 +57,26 @@ const layout = ref<'overlay' | 'split'>('overlay');
 const metric = ref<'temp' | 'rad'>('temp');
 
 const selected = computed(() => selectedIds.value.map(id => props.stations.find(s => s.id === id)!).filter(Boolean));
-const useDemo = computed(() => Object.keys(props.series).length === 0);
+const useDemo = computed(() => !props.embedded && Object.keys(props.series).length === 0);
 const raw = (id: number, b = false) => useDemo.value ? demoSeries(id, b ? periodB.value : periodA.value) : (b ? props.seriesB : props.series)[id] ?? [];
+
+watch(() => props.selectedStationIds, ids => {
+  if (ids && ids.join(',') !== selectedIds.value.join(',')) {
+    selectedIds.value = [...ids];
+  }
+});
+watch(() => props.periodA, period => {
+  if (period && (period.start !== periodA.value.start || period.end !== periodA.value.end)) {
+    periodA.value = { ...period };
+  }
+});
+watch(() => props.periodB, period => {
+  compareMode.value = !!period;
+
+  if (period && (period.start !== periodB.value.start || period.end !== periodB.value.end)) {
+    periodB.value = { ...period };
+  }
+});
 
 // Reclassificação reativa: qualquer mudança nos sliders/overrides recalcula tudo.
 const classified = computed(() => Object.fromEntries(selected.value.map(s => [s.id, reclassify(s.id, raw(s.id), thresholds.value, overrides.value)])) as Record<number, ClassifiedPoint[]>);
@@ -97,17 +122,23 @@ function resetOverride(p: ClassifiedPoint) {
 // Sincroniza filtros com a URL / recarrega dados reais do servidor.
 watch([selectedIds, periodA, periodB, compareMode], () => {
   if (useDemo.value) return;
-  router.get(route('stations.compare'), {
-    stations: selectedIds.value, start: periodA.value.start, end: periodA.value.end,
+  router.get(route(props.embedded ? 'station-dashboard' : 'stations.compare'), {
+    ...(props.embedded ? {
+      station_id: props.selectedDashboardStationId,
+      date: props.selectedDashboardDate,
+    } : {}),
+    stations: selectedIds.value,
+    start: periodA.value.start,
+    end: periodA.value.end,
     ...(compareMode.value ? { compare_start: periodB.value.start, compare_end: periodB.value.end } : {}),
   }, { preserveState: true, preserveScroll: true, replace: true, only: ['series', 'seriesB', 'overrides', 'selectedStationIds', 'periodA', 'periodB'] });
 }, { deep: true });
 </script>
 
 <template>
-  <div class="min-h-screen bg-[var(--background)] font-sans text-[var(--foreground)]">
-    <div class="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
-      <header class="flex flex-wrap items-end justify-between gap-4">
+  <div :class="embedded ? 'space-y-6' : 'min-h-screen bg-[var(--background)] font-sans text-[var(--foreground)]'">
+    <div :class="embedded ? 'space-y-6' : 'mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8'">
+      <header v-if="!embedded" class="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p class="text-xs font-semibold uppercase tracking-widest text-[var(--primary)]">Análise comparativa</p>
           <h1 class="text-2xl font-extrabold tracking-tight sm:text-3xl">Comparação entre estações</h1>
@@ -116,6 +147,20 @@ watch([selectedIds, periodA, periodB, compareMode], () => {
         <button type="button" @click="panelOpen = true" class="flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-white shadow transition hover:opacity-90">
           <SlidersHorizontal :size="16" /> Limiares de qualidade
         </button>
+      </header>
+      <header v-else class="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-widest text-[var(--primary)]">Análise comparativa</p>
+          <h2 class="text-xl font-extrabold tracking-tight">Comparação entre estações</h2>
+        </div>
+        <div class="flex flex-wrap items-center gap-2">
+          <Link v-if="canGenerateReports" :href="route('stations.compare')" class="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--muted)]">
+            Abrir tela separada
+          </Link>
+          <button type="button" @click="panelOpen = true" class="flex items-center gap-2 rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-semibold text-white shadow transition hover:opacity-90">
+            <SlidersHorizontal :size="14" /> Limiares
+          </button>
+        </div>
       </header>
 
       <section class="grid gap-4 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm lg:grid-cols-[minmax(260px,1fr)_auto]">

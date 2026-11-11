@@ -1,50 +1,110 @@
 
 ## Dashboard
 
+Visão geral da estação selecionada, com indicadores de temperatura, irradiação, qualidade das leituras, gráficos e alertas para revisão.
+
 ![Captura da tela StationDashboard](docs/images/station-dashboard.png)
 
+### Comparação entre estações
+
+Permite comparar até quatro estações e diferentes períodos, visualizar gráficos e resumos, ajustar limiares de qualidade e auditar leituras.
+
+![Tela de análise comparativa entre estações](docs/images/comparativo-stations.png)
+
 ### Geração de documentos
+
+Permite solicitar relatórios da estação em PDF, Excel ou CSV e acompanhar o status de geração.
 
 ![Modal de geração de documentos da StationDashboard](docs/images/station-dashboard-documents.png)
 
 ### Relatório PDF
 
+Apresenta o relatório diário com os dados meteorológicos, indicadores de qualidade e anotações do operador.
+
 ![Prévia do relatório diário em PDF](docs/images/station-report-pdf.png)
 
+### Jobs concluídos no Horizon
+
+Exibe o acompanhamento dos jobs processados pelas filas, incluindo os que foram concluídos com sucesso.
+
+![Jobs concluídos no dashboard do Horizon](docs/images/horizon_jobs_completed.png)
+
+### Telas e Fluxograma no Figma
 [Projeto no Figma](https://www.figma.com/design/lF5Fm3yNbVcWsoOaG9Ljbf/Untitled?node-id=1-2&t=fpFmr2RFByrE1oDz-1)
 
 ### Rodar o Projeto
-1 - Requisitos: Docker e Node instalados
 
-2 - Variáveis de Ambiente com .env
+Pré-requisitos: Docker com Docker Compose e Node.js/npm instalados. Execute os comandos a seguir na pasta raiz do projeto.
 
-3 - docker exec -it demei-app composer install 
+1. Crie o arquivo de ambiente:
 
-ou 
+   ```powershell
+   Copy-Item .env.example .env
+   ```
 
-composer install --ignore-platform-reqs
+2. Configure o `.env` para os serviços do Docker. Use PostgreSQL e Redis; substitua a senha de exemplo por uma senha local segura:
 
-4 - docker compose up -d --build
+   ```dotenv
+   APP_URL=http://localhost:8000
+   DB_CONNECTION=pgsql
+   DB_HOST=db
+   DB_PORT=5432
+   DB_DATABASE=demei_dashboard
+   DB_USERNAME=demei_user
+   DB_PASSWORD=escolha-uma-senha-local
+   REDIS_HOST=redis
+   QUEUE_CONNECTION=redis
+   ```
 
-5 - npm install
+   Mantenha os demais valores de `.env.example` ou ajuste-os conforme o ambiente.
 
-6 - docker exec -it demei-app php artisan migrate
+3. Instale as dependências PHP dentro do container:
 
-7 - docker exec -it demei-app php artisan db:seed --class=StationSeeder
+   ```sh
+   docker compose run --rm app composer install
+   ```
 
-8 - npm run dev  
+4. Instale as dependências do frontend:
 
-9 - rodar seed
+   ```sh
+   npm install
+   ```
 
-docker exec -it demei-app php artisan tinker scripts/seed.php
+5. Inicie a aplicação, o banco, o Redis, o Horizon e o scheduler:
 
-ou 
+   ```sh
+   docker compose up -d --build
+   ```
 
-Executar os jobs manualmente:
+6. Gere a chave da aplicação, prepare o banco e cadastre as estações:
 
-docker exec -it demei-app php artisan tinker
+   ```sh
+   docker compose exec app php artisan key:generate
+   docker compose exec app php artisan migrate --force
+   docker compose exec app php artisan db:seed --class=StationSeeder
+   ```
 
+7. Inicie o servidor de desenvolvimento do frontend em outro terminal:
+
+   ```sh
+   npm run dev
+   ```
+
+8. Acesse <http://localhost:8000>. O painel do Horizon fica disponível em <http://localhost:8000/horizon>.
+
+Para compilar os arquivos frontend para produção, use `npm run build`. Para acompanhar os serviços, use `docker compose logs -f app horizon scheduler`.
+
+#### Disparar a coleta manualmente
+
+Com os serviços iniciados e as estações cadastradas, os jobs de coleta podem ser enviados à fila Redis:
+
+```sh
+docker compose exec app php artisan tinker
 ```
+
+No Tinker, execute:
+
+```php
 App\Models\Station::where('is_active', true)->get()->each(
     fn ($station) => App\Jobs\FetchStationData::dispatch($station)
 );
@@ -108,50 +168,3 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
-
-### Comandos úteis:
-composer install --ignore-platform-reqs
-docker exec -it demei-app composer install
-docker compose up -d --build
-
-php artisan serve
-npm run dev  
-npm run build
-
-docker exec -it demei-app php artisan make:model Station -m
-docker exec -it demei-app php artisan make:model StationRawData -m
-
-docker exec -it demei-app php artisan migrate
-
-docker exec -it demei-app php artisan make:job FetchStationData
-docker exec -it demei-app php artisan make:job ClassifyStationData
-
-docker exec -it demei-app php artisan make:seeder StationSeeder
-
-
-rodar o seeder: 
-docker exec -it demei-app php artisan db:seed --class=StationSeeder
-
-docker exec -it demei-app php artisan tinker
-// Dentro do tinker, digite:
-App\Models\Station::all();
-
-testar job de coleta:
-docker exec -it demei-app php artisan tinker
-App\Jobs\FetchStationData::dispatch(App\Models\Station::first());
-
-Alterações nos jobs:
-docker exec -it demei-app php artisan horizon:terminate
-
-criar tabelas:
-create_measurements_table
-
-migrate fresh:
-docker exec -it demei-app php artisan migrate:refresh
-docker exec -it demei-app php artisan migrate:fresh --seed
-
-executar os jobs manualmente:
-docker exec -it demei-app php artisan tinker
-App\Models\Station::where('is_active', true)->get()->each(
-    fn ($station) => App\Jobs\FetchStationData::dispatch($station)
-);

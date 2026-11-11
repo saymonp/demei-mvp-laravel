@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Measurement;
 use App\Models\Station;
+use App\Services\StationComparisonData;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -13,7 +14,7 @@ use Inertia\Response;
 
 class StationComparisonController extends Controller
 {
-    public function index(Request $request): Response
+    public function index(Request $request, StationComparisonData $comparisonData): Response
     {
         $v = $request->validate([
             'stations' => ['nullable', 'array', 'min:2', 'max:4'],
@@ -30,16 +31,10 @@ class StationComparisonController extends Controller
         $periodA = ['start' => $v['start'] ?? $today, 'end' => $v['end'] ?? ($v['start'] ?? $today)];
         $periodB = isset($v['compare_start']) ? ['start' => $v['compare_start'], 'end' => $v['compare_end'] ?? $v['compare_start']] : null;
 
-        return Inertia::render('StationComparison', [
+        return Inertia::render('StationComparison', array_merge([
             'stations' => $stations,
-            'selectedStationIds' => $ids,
-            'periodA' => $periodA,
-            'periodB' => $periodB,
-            'series' => fn () => $this->series($ids->all(), $periodA),
-            'seriesB' => fn () => $periodB ? $this->series($ids->all(), $periodB) : (object) [],
-            'overrides' => fn () => $this->overrides($ids->all(), $periodB ? [$periodA, $periodB] : [$periodA]),
             'canAudit' => $request->user() !== null,
-        ]);
+        ], $comparisonData->props($ids->all(), $periodA, $periodB)));
     }
 
     public function override(Request $request): RedirectResponse
@@ -83,55 +78,5 @@ class StationComparisonController extends Controller
         DB::table('measurement_overrides')->where('measurement_id', $v['measurement_id'])->delete();
 
         return back();
-    }
-
-    /** @return array{0: CarbonImmutable, 1: CarbonImmutable} */
-    private function range(array $p): array
-    {
-        $start = CarbonImmutable::createFromFormat('!Y-m-d', $p['start'], 'America/Sao_Paulo');
-        $end = CarbonImmutable::createFromFormat('!Y-m-d', $p['end'], 'America/Sao_Paulo')->addDay();
-        // Limita a 31 dias para manter o payload leve.
-        if ($start->diffInDays($end) > 31) {
-            $end = $start->addDays(31);
-        }
-
-        return [$start->utc(), $end->utc()];
-    }
-
-    private function series(array $ids, array $period): array
-    {
-        [$start, $end] = $this->range($period);
-
-        return Measurement::query()
-            ->whereIn('station_id', $ids)
-            ->where('timestamp', '>=', $start)->where('timestamp', '<', $end)
-            ->orderBy('timestamp')
-            ->get(['id', 'station_id', 'timestamp', 'sensor_measurement_type', 'value', 'quality_flag', 'flag_reason'])
-            ->groupBy('station_id')
-            ->map(fn ($rows) => $rows->map(fn ($m) => [
-                'measurement_id' => $m->id,
-                'timestamp' => CarbonImmutable::parse($m->timestamp, 'UTC')->utc()->toIso8601String(),
-                'sensor_measurement_type' => $m->sensor_measurement_type,
-                'value' => $m->value === null ? null : (float) $m->value,
-                'quality_flag' => $m->quality_flag->value,
-                'flag_reason' => $m->flag_reason,
-            ])->values())
-            ->all();
-    }
-
-    /** Chave igual a overrideKey() no front: "station|measurement|id". */
-    private function overrides(array $ids, array $periods): array
-    {
-        $q = DB::table('measurement_overrides')->whereIn('station_id', $ids)
-            ->whereNotNull('measurement_id')->where(function ($w) use ($periods) {
-                foreach ($periods as $p) {
-                    [$s, $e] = $this->range($p);
-                    $w->orWhere(fn ($x) => $x->where('timestamp', '>=', $s)->where('timestamp', '<', $e));
-                }
-            });
-
-        return $q->get()->mapWithKeys(fn ($o) => [
-            $o->station_id.'|measurement|'.$o->measurement_id => (int) $o->quality_flag,
-        ])->all();
     }
 }

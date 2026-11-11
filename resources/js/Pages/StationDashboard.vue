@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, defineComponent, h, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import Dropdown from '@/Components/Dropdown.vue';
 import DropdownLink from '@/Components/DropdownLink.vue';
@@ -9,9 +9,10 @@ import { CanvasRenderer } from 'echarts/renderers';
 import { LineChart } from 'echarts/charts';
 import { GridComponent, TooltipComponent, LegendComponent, DataZoomComponent, MarkLineComponent, MarkAreaComponent } from 'echarts/components';
 import { GitCompareArrows } from '@lucide/vue';
-import { defineComponent, h } from 'vue';
 import { chartOptions, type ChartSettings } from '../weather/chart-options';
 import { stats, formatNumber, timeLabel, csvContent, qualityLabels, type Measurement, type Quality } from '../weather/data';
+import type { OverrideMap, Period } from '../weather/compare';
+import QualityOverrideMenu from '../Components/Weather/QualityOverrideMenu.vue';
 import '../../css/weather-dashboard.css';
 
 use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent, DataZoomComponent, MarkLineComponent, MarkAreaComponent]);
@@ -33,6 +34,7 @@ const ChevronRight = makeIcon({ tag: 'polyline', attrs: { points: '9 18 15 12 9 
 const MapPin = makeIcon({ tag: 'path', attrs: { d: 'M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z' } }, { tag: 'circle', attrs: { cx: 12, cy: 10, r: 2.5 } });
 const Navigation = makeIcon({ tag: 'path', attrs: { d: 'm3 11 19-9-9 19-2-8-8-2Z' } });
 const RefreshCw = makeIcon({ tag: 'path', attrs: { d: 'M20 7v5h-5M4 17v-5h5' } }, { tag: 'path', attrs: { d: 'M5.6 9A7 7 0 0 1 18 6l2 6M4 12l2 6a7 7 0 0 0 12.4-3' } });
+const StationComparison = defineAsyncComponent(() => import('./StationComparison.vue'));
 
 type Station = { id: number; name: string; provider: string; latitude?: number | null; longitude?: number | null; altitude?: number | null; valid_percentage?: number | null };
 
@@ -42,6 +44,13 @@ const props = defineProps<{
   selectedStationId: number | null;
   selectedDate: string;
   canGenerateReports: boolean;
+  canAudit: boolean;
+  selectedStationIds: number[];
+  periodA: Period;
+  periodB: Period | null;
+  series: Record<number, Measurement[]>;
+  seriesB: Record<number, Measurement[]>;
+  overrides: OverrideMap;
 }>();
 const page = usePage<{ auth: { user: { id: number; name: string; email: string } } }>();
 
@@ -53,12 +62,15 @@ const CLASSIFICATION_CHECK_INTERVAL = 35 * 60 * 1000;
 
 const stationId = ref(props.selectedStationId); 
 const date = ref(props.selectedDate); 
+const measurements = ref<Measurement[]>([...props.measurements]);
+const qualityActionError = ref('');
+const pendingQualityUpdates = ref(new Set<number>());
 const quality = ref<Quality | null>(null); 
 const radiationMean = ref(true); 
 const temperatureMean = ref(true); 
 const radiationMax = ref(1500); 
 const temperatureMax = ref(60); 
-const view = ref('overview'); 
+const view = ref<'overview' | 'logs' | 'comparison'>('overview');
 const highlighted = ref(''); 
 const busy = ref(false);
 const lastBatchId = ref<string | null>(null);
@@ -69,6 +81,7 @@ let echo: EchoClient | undefined;
 
 watch(() => props.selectedStationId, v => stationId.value = v); 
 watch(() => props.selectedDate, v => date.value = v);
+watch(() => props.measurements, rows => measurements.value = [...rows]);
 
 function reload() { 
   router.get('/station-dashboard', { station_id: stationId.value, date: date.value }, { preserveState: true, replace: true, onStart: () => busy.value = true, onFinish: () => busy.value = false });
@@ -321,12 +334,12 @@ watch([stationId, date], () => {
 onBeforeUnmount(() => window.clearTimeout(reportTimer));
 
 const station = computed(() => props.stations.find(s => s.id === stationId.value));
-const rad = computed(() => props.measurements.filter(r => r.sensor_measurement_type === 'Solar Radiation'));
-const temp = computed(() => props.measurements.filter(r => r.sensor_measurement_type === 'Air Temperature'));
+const rad = computed(() => measurements.value.filter(r => r.sensor_measurement_type === 'Solar Radiation'));
+const temp = computed(() => measurements.value.filter(r => r.sensor_measurement_type === 'Air Temperature'));
 const rs = computed(() => stats(rad.value)); 
 const ts = computed(() => stats(temp.value));
-const counts = computed(() => [0, 1, 2, 3].map(q => props.measurements.filter(r => r.quality_flag === q).length));
-const reliable = computed(() => props.measurements.length ? counts.value[0] / props.measurements.length * 100 : null);
+const counts = computed(() => [0, 1, 2, 3].map(q => measurements.value.filter(r => r.quality_flag === q).length));
+const reliable = computed(() => measurements.value.length ? counts.value[0] / measurements.value.length * 100 : null);
 
 const colors = computed(() => { 
   if (typeof document === 'undefined') return null; 
@@ -336,16 +349,64 @@ const colors = computed(() => {
 });
 
 const settings = computed(() => ({ filters: quality.value === null ? [0, 1, 2, 3] as Quality[] : [quality.value], radiationMean: radiationMean.value, temperatureMean: temperatureMean.value, radiationMax: radiationMax.value, temperatureMax: temperatureMax.value }));
-const option = (kind: ChartSettings['kind']) => colors.value ? chartOptions(props.measurements, { ...settings.value, kind, colors: colors.value }) : {};
+const option = (kind: ChartSettings['kind']) => colors.value ? chartOptions(measurements.value, { ...settings.value, kind, colors: colors.value }) : {};
 const combinedOption = computed(() => option('combined')); 
 const radiationOption = computed(() => option('radiation')); 
 const temperatureOption = computed(() => option('temperature'));
 
 const qclass = ['valid', 'invalid', 'suspect', 'gap'];
-const filters = computed(() => [{ label: 'Todos', flag: null, count: props.measurements.length }, { label: 'Válidos', flag: 0, count: counts.value[0] }, { label: 'Suspeitos', flag: 2, count: counts.value[2] }, { label: 'Inválidos', flag: 1, count: counts.value[1] }, { label: 'Lacunas', flag: 3, count: counts.value[3] }]);
-const alerts = computed(() => props.measurements.filter(r => r.quality_flag !== 0));
-const paired = computed(() => [...new Set(props.measurements.map(r => r.timestamp))].sort().map(timestamp => ({ timestamp, rad: rad.value.find(r => r.timestamp === timestamp), temp: temp.value.find(r => r.timestamp === timestamp) })).filter(r => quality.value === null || r.rad?.quality_flag === quality.value || r.temp?.quality_flag === quality.value));
+const filters = computed(() => [{ label: 'Todos', flag: null, count: measurements.value.length }, { label: 'Válidos', flag: 0, count: counts.value[0] }, { label: 'Suspeitos', flag: 2, count: counts.value[2] }, { label: 'Inválidos', flag: 1, count: counts.value[1] }, { label: 'Lacunas', flag: 3, count: counts.value[3] }]);
+const alerts = computed(() => measurements.value.filter(r => r.quality_flag !== 0));
+const paired = computed(() => [...new Set(measurements.value.map(r => r.timestamp))].sort().map(timestamp => ({ timestamp, rad: rad.value.find(r => r.timestamp === timestamp), temp: temp.value.find(r => r.timestamp === timestamp) })).filter(r => quality.value === null || r.rad?.quality_flag === quality.value || r.temp?.quality_flag === quality.value));
 const displayed = computed(() => view.value === 'logs' ? paired.value : paired.value.filter(r => r.rad?.quality_flag !== 0 || r.temp?.quality_flag !== 0).slice(0, 12));
+
+function updateMeasurementQuality(measurement: Measurement, flag: Quality): void {
+  const measurementId = measurement.measurement_id;
+
+  if (!props.canAudit || measurementId === undefined) {
+    return;
+  }
+
+  qualityActionError.value = '';
+  pendingQualityUpdates.value = new Set(pendingQualityUpdates.value).add(measurementId);
+
+  router.post(route('stations.measurements.override'), {
+    measurement_id: measurementId,
+    quality_flag: flag,
+  }, {
+    preserveScroll: true,
+    preserveState: true,
+    onError: () => qualityActionError.value = 'Não foi possível alterar a qualidade desta leitura.',
+    onFinish: () => {
+      const pending = new Set(pendingQualityUpdates.value);
+      pending.delete(measurementId);
+      pendingQualityUpdates.value = pending;
+    },
+  });
+}
+
+function resetMeasurementQuality(measurement: Measurement): void {
+  const measurementId = measurement.measurement_id;
+
+  if (!props.canAudit || measurementId === undefined) {
+    return;
+  }
+
+  qualityActionError.value = '';
+  pendingQualityUpdates.value = new Set(pendingQualityUpdates.value).add(measurementId);
+
+  router.delete(route('stations.measurements.override.destroy'), {
+    data: { measurement_id: measurementId },
+    preserveScroll: true,
+    preserveState: true,
+    onError: () => qualityActionError.value = 'Não foi possível restaurar a qualidade automática.',
+    onFinish: () => {
+      const pending = new Set(pendingQualityUpdates.value);
+      pending.delete(measurementId);
+      pendingQualityUpdates.value = pending;
+    },
+  });
+}
 
 function peakTime(sensor: Measurement[], max: number | null) { 
   const row = sensor.find(r => r.quality_flag === 0 && r.value === max); 
@@ -361,7 +422,7 @@ function review(timestamp: string) {
 
 function exportData() { 
   const a = document.createElement('a'); 
-  a.href = URL.createObjectURL(new Blob([csvContent(props.measurements.filter(r => quality.value === null || r.quality_flag === quality.value))], { type: 'text/csv;charset=utf-8' })); 
+  a.href = URL.createObjectURL(new Blob([csvContent(measurements.value.filter(r => quality.value === null || r.quality_flag === quality.value))], { type: 'text/csv;charset=utf-8' }));
   a.download = `${station.value?.id ?? 'station'}-${date.value}.csv`; 
   a.click(); 
   URL.revokeObjectURL(a.href); 
@@ -388,6 +449,7 @@ const mapStations = computed(() => {
       <nav class="nav-tabs">
         <button :class="{ active: view === 'overview' }" @click="view = 'overview'">Visão geral</button>
         <button :class="{ active: view === 'logs' }" @click="view = 'logs'">Logs</button>
+        <button :class="{ active: view === 'comparison' }" @click="view = 'comparison'">Análise comparativa</button>
         <button @click="openHorizon">Horizon</button>
       </nav>
 
@@ -450,6 +512,7 @@ const mapStations = computed(() => {
                         </div>
     </header>
 
+    <template v-if="view !== 'comparison'">
     <section class="">
   
       <h1>{{ station?.name ?? 'Nenhuma estação cadastrada' }}, Rio Grande do Sul</h1>
@@ -507,10 +570,10 @@ const mapStations = computed(() => {
           <li class="rounded-full bg-slate-100 px-3 py-1.5">Auditoria de leituras</li>
         </ul>
       </div>
-      <Link :href="route('stations.compare')" class="export-button min-h-11 justify-center px-5 no-underline">
+      <button type="button" class="export-button min-h-11 justify-center px-5 no-underline" @click="view = 'comparison'">
         <GitCompareArrows :size="16" />
-        Abrir comparação
-      </Link>
+        Comparar agora
+      </button>
     </section>
 
     <section class="filterbar">
@@ -555,18 +618,32 @@ const mapStations = computed(() => {
         <aside class="panel attention">
           <h2>Precisa de atenção</h2>
           <small>{{ alerts.length }} leituras para revisar no período</small>
-          <div class="attention-list">
-            <button v-for="a in alerts.slice(0, 4)" :key="a.timestamp + a.sensor_measurement_type" class="attention-item" @click="review(a.timestamp)">
+          <div class="attention-list max-h-[420px] overflow-y-auto">
+            <div v-for="a in alerts" :key="a.measurement_id ?? a.timestamp + a.sensor_measurement_type" class="attention-item" :aria-busy="pendingQualityUpdates.has(a.measurement_id ?? -1)">
               <span :class="['attention-icon', qclass[a.quality_flag]]"><i :class="['dot', qclass[a.quality_flag]]" /></span>
-              <div>
+              <button type="button" class="attention-review min-w-0 flex-1 border-0 bg-transparent p-0 text-left hover:bg-transparent" @click="review(a.timestamp)">
                 <strong>{{ timeLabel(a.timestamp) }}, {{ a.sensor_measurement_type === 'Solar Radiation' ? 'irradiação' : 'temperatura' }}</strong>
                 <p>{{ a.flag_reason ?? 'Qualidade sinalizada' }}</p>
-              </div>
-              <span :class="['badge', qclass[a.quality_flag]]">{{ qualityLabels[a.quality_flag] }}</span>
-              <ChevronRight :size="13" />
-            </button>
+              </button>
+              <span :class="['badge', qclass[a.quality_flag]]" :title="a.audited ? 'Qualidade alterada manualmente' : undefined">
+                {{ qualityLabels[a.quality_flag] }}<span v-if="a.audited" aria-hidden="true"> ·</span>
+              </span>
+              <QualityOverrideMenu
+                v-if="canAudit"
+                :class="['shrink-0', pendingQualityUpdates.has(a.measurement_id ?? -1) && 'pointer-events-none opacity-50']"
+                :current="a.quality_flag"
+                :audited="a.audited"
+                compact
+                @change="flag => updateMeasurementQuality(a, flag)"
+                @reset="resetMeasurementQuality(a)"
+              />
+              <button type="button" class="border-0 bg-transparent p-0 hover:bg-transparent" :aria-label="`Ver medições às ${timeLabel(a.timestamp)}`" @click="review(a.timestamp)">
+                <ChevronRight :size="13" />
+              </button>
+            </div>
             <p v-if="!alerts.length" class="empty">Nenhuma leitura sinalizada.</p>
           </div>
+          <p v-if="qualityActionError" class="mt-2 text-xs text-red-600" role="alert">{{ qualityActionError }}</p>
         </aside>
       </div>
 
@@ -706,5 +783,22 @@ const mapStations = computed(() => {
         </template>
       </section>
     </div>
+    </template>
+
+    <StationComparison
+      v-else
+      :stations="stations"
+      :selected-station-ids="selectedStationIds"
+      :period-a="periodA"
+      :period-b="periodB"
+      :series="series"
+      :series-b="seriesB"
+      :overrides="overrides"
+      :can-audit="canAudit"
+      :can-generate-reports="canGenerateReports"
+      :selected-dashboard-station-id="selectedStationId"
+      :selected-dashboard-date="selectedDate"
+      embedded
+    />
   </main>
 </template>
