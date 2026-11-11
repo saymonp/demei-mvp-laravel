@@ -8,6 +8,7 @@ import { use } from 'echarts/core';
 import { CanvasRenderer } from 'echarts/renderers';
 import { LineChart } from 'echarts/charts';
 import { GridComponent, TooltipComponent, LegendComponent, DataZoomComponent, MarkLineComponent, MarkAreaComponent } from 'echarts/components';
+import { GitCompareArrows } from '@lucide/vue';
 import { defineComponent, h } from 'vue';
 import { chartOptions, type ChartSettings } from '../weather/chart-options';
 import { stats, formatNumber, timeLabel, csvContent, qualityLabels, type Measurement, type Quality } from '../weather/data';
@@ -491,6 +492,25 @@ const mapStations = computed(() => {
           </div>
         </div>
       </div>
+    </section>
+
+    <section v-if="view === 'overview' && stations.length >= 2" class="panel mx-auto grid max-w-6xl gap-5 p-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+      <div class="space-y-3">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wide text-sky-700">Novidade</p>
+          <h2 class="mt-1 text-lg font-extrabold">Compare estações e períodos</h2>
+          <p class="mt-1 text-sm text-slate-600">Analise até quatro estações, compare intervalos e revise a qualidade das medições em um só lugar.</p>
+        </div>
+        <ul class="flex flex-wrap gap-2 text-xs font-medium text-slate-600">
+          <li class="rounded-full bg-slate-100 px-3 py-1.5">Gráficos lado a lado ou sobrepostos</li>
+          <li class="rounded-full bg-slate-100 px-3 py-1.5">Limiares de qualidade ajustáveis</li>
+          <li class="rounded-full bg-slate-100 px-3 py-1.5">Auditoria de leituras</li>
+        </ul>
+      </div>
+      <Link :href="route('stations.compare')" class="export-button min-h-11 justify-center px-5 no-underline">
+        <GitCompareArrows :size="16" />
+        Abrir comparação
+      </Link>
     </section>
 
     <section class="filterbar">

@@ -23,6 +23,7 @@
         "@laravel/multiplex": "^0.4.1"
     },
     "dependencies": {
+        "@lucide/vue": "^1.72.0",
         "echarts": "^6.1.0",
         "vue-echarts": "^8.3.2"
     }

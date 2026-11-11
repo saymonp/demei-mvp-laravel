@@ -1,5 +1,5 @@
 export type Quality = 0 | 1 | 2 | 3;
-export type Measurement = { timestamp: string; value: number | null; quality_flag: Quality; flag_reason?: string | undefined; sensor_measurement_type: string };
+export type Measurement = { measurement_id?: number; timestamp: string; value: number | null; quality_flag: Quality; flag_reason?: string | undefined; sensor_measurement_type: string };
 export const qualityLabels = ['Válido', 'Inválido', 'Suspeito', 'Lacuna'] as const;
 export const stations = [
  {id:1,name:'Ijuí',provider:'EST-01',lat:-28.37,lon:-53.94,alt:326,quality:'91,7',x:51,y:50},

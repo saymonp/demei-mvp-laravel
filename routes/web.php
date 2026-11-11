@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\StationComparisonController;
 use App\Http\Controllers\StationController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
@@ -28,6 +29,12 @@ Route::middleware('auth')->group(function () {
         ->name('station-dashboard.classification-version');
     Route::get('/station-dashboard', [StationController::class, 'index'])
         ->name('station-dashboard');
+    Route::get('/stations/compare', [StationComparisonController::class, 'index'])
+        ->name('stations.compare');
+    Route::post('/stations/measurements/override', [StationComparisonController::class, 'override'])
+        ->name('stations.measurements.override');
+    Route::delete('/stations/measurements/override', [StationComparisonController::class, 'destroyOverride'])
+        ->name('stations.measurements.override.destroy');
 });
 
 require __DIR__.'/reports.php';
