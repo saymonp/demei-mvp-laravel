@@ -3,13 +3,13 @@
 
 Visão geral da estação selecionada, com indicadores de temperatura, irradiação, qualidade das leituras, gráficos e alertas para revisão.
 
-![Captura da tela StationDashboard](docs/images/station-dashboard.png)
+![Captura da tela StationDashboard](docs/images/dashboard.png)
 
 ### Comparação entre estações
 
 Permite comparar até quatro estações e diferentes períodos, visualizar gráficos e resumos, ajustar limiares de qualidade e auditar leituras.
 
-![Tela de análise comparativa entre estações](docs/images/comparativo-stations.png)
+![Tela de análise comparativa entre estações](docs/images/dashboard-demo-dados-completos.png)
 
 ### Geração de documentos
 
