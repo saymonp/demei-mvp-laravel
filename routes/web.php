@@ -3,6 +3,7 @@
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StationComparisonController;
 use App\Http\Controllers\StationController;
+use App\Http\Controllers\StationLatestController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -31,6 +32,8 @@ Route::middleware('auth')->group(function () {
         ->name('station-dashboard');
     Route::get('/stations/compare', [StationComparisonController::class, 'index'])
         ->name('stations.compare');
+    Route::get('/stations/latest', StationLatestController::class)
+        ->name('stations.latest');
     Route::post('/stations/measurements/override', [StationComparisonController::class, 'override'])
         ->name('stations.measurements.override');
     Route::delete('/stations/measurements/override', [StationComparisonController::class, 'destroyOverride'])

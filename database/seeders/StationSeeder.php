@@ -12,6 +12,9 @@ class StationSeeder extends Seeder
      */
     public function run(): void
     {
+        $licorLatitude = env('LICOR_LATITUDE', '-28.39');
+        $licorLongitude = env('LICOR_LONGITUDE', '-53.95');
+
         Station::updateOrCreate(
             // Condição de busca (procura pela estação com este nome)
             ['name' => 'unijui_gaic'],
@@ -22,8 +25,8 @@ class StationSeeder extends Seeder
                 'provider' => 'licor',
                 'bearer_token' => env('LICOR_BEARER_TOKEN'),
                 'loggers' => env('LICOR_LOGGERS', '20770262,20748028'),
-                'latitude' => env('LICOR_LATITUDE', '-28.39'),
-                'longitude' => env('LICOR_LONGITUDE', '-53.95'),
+                'latitude' => $licorLatitude,
+                'longitude' => $licorLongitude,
                 'is_active' => true,
             ]
         );
@@ -37,8 +40,8 @@ class StationSeeder extends Seeder
                 'api_url' => env('OPENMETEO_API_URL', 'https://api.open-meteo.com/v1/forecast'),
                 'provider' => 'open_meteo',
                 'bearer_token' => env('OPENMETEO_BEARER_TOKEN', ''),
-                'latitude' => env('OPENMETEO_LATITUDE', '-28.30'),
-                'longitude' => env('OPENMETEO_LONGITUDE', '-54.26'),
+                'latitude' => $licorLatitude,
+                'longitude' => $licorLongitude,
                 'is_active' => true,
             ]
         );

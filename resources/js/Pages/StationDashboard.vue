@@ -13,6 +13,8 @@ import { chartOptions, type ChartSettings } from '../weather/chart-options';
 import { stats, formatNumber, timeLabel, csvContent, qualityLabels, type Measurement, type Quality } from '../weather/data';
 import type { OverrideMap, Period } from '../weather/compare';
 import QualityOverrideMenu from '../Components/Weather/QualityOverrideMenu.vue';
+import StationMap from '../Components/Weather/StationMap.vue';
+import StationMapBoundary from '../Components/Weather/StationMapBoundary.vue';
 import '../../css/weather-dashboard.css';
 
 use([CanvasRenderer, LineChart, GridComponent, TooltipComponent, LegendComponent, DataZoomComponent, MarkLineComponent, MarkAreaComponent]);
@@ -31,8 +33,6 @@ const CircleCheck = makeIcon({ tag: 'circle', attrs: { cx: 12, cy: 12, r: 10 } }
 const Cloud = makeIcon({ tag: 'path', attrs: { d: 'M20 16.2A4.5 4.5 0 0 0 18.5 7.4 6 6 0 0 0 7 8.5a4 4 0 0 0 .5 8H19' } });
 const Download = makeIcon({ tag: 'path', attrs: { d: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4' } }, { tag: 'polyline', attrs: { points: '7 10 12 15 17 10' } }, { tag: 'line', attrs: { x1: 12, y1: 15, x2: 12, y2: 3 } });
 const ChevronRight = makeIcon({ tag: 'polyline', attrs: { points: '9 18 15 12 9 6' } });
-const MapPin = makeIcon({ tag: 'path', attrs: { d: 'M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z' } }, { tag: 'circle', attrs: { cx: 12, cy: 10, r: 2.5 } });
-const Navigation = makeIcon({ tag: 'path', attrs: { d: 'm3 11 19-9-9 19-2-8-8-2Z' } });
 const RefreshCw = makeIcon({ tag: 'path', attrs: { d: 'M20 7v5h-5M4 17v-5h5' } }, { tag: 'path', attrs: { d: 'M5.6 9A7 7 0 0 1 18 6l2 6M4 12l2 6a7 7 0 0 0 12.4-3' } });
 const StationComparison = defineAsyncComponent(() => import('./StationComparison.vue'));
 
@@ -83,8 +83,70 @@ watch(() => props.selectedStationId, v => stationId.value = v);
 watch(() => props.selectedDate, v => date.value = v);
 watch(() => props.measurements, rows => measurements.value = [...rows]);
 
-function reload() { 
-  router.get('/station-dashboard', { station_id: stationId.value, date: date.value }, { preserveState: true, replace: true, onStart: () => busy.value = true, onFinish: () => busy.value = false });
+const comparisonIds = ref<number[]>([...props.selectedStationIds]);
+
+watch(() => props.selectedStationIds, ids => {
+  comparisonIds.value = [...ids];
+});
+
+const COMPARISON_ONLY = ['series', 'seriesB', 'overrides', 'selectedStationIds', 'periodA', 'periodB'];
+
+function periodParams() {
+  return {
+    start: props.periodA.start,
+    end: props.periodA.end,
+    ...(props.periodB ? { compare_start: props.periodB.start, compare_end: props.periodB.end } : {}),
+  };
+}
+
+function setComparisonIds(ids: number[]): void {
+  comparisonIds.value = ids;
+
+  if (ids.length < 2) {
+    return;
+  }
+
+  router.get('/station-dashboard', {
+    station_id: stationId.value,
+    date: date.value,
+    stations: ids,
+    ...periodParams(),
+  }, {
+    preserveState: true,
+    preserveScroll: true,
+    replace: true,
+    only: COMPARISON_ONLY,
+  });
+}
+
+function pickStation(id: number): void {
+  stationId.value = id;
+  const localSelection = comparisonIds.value.length < 2 ? [...comparisonIds.value] : null;
+
+  router.get('/station-dashboard', {
+    station_id: id,
+    date: date.value,
+    ...(comparisonIds.value.length >= 2 ? { stations: comparisonIds.value, ...periodParams() } : {}),
+  }, {
+    preserveState: true,
+    replace: true,
+    onStart: () => busy.value = true,
+    onFinish: () => busy.value = false,
+    onSuccess: () => {
+      if (localSelection !== null) {
+        comparisonIds.value = localSelection;
+      }
+    },
+  });
+}
+
+function reload(): void {
+  if (stationId.value === null) {
+    reloadMeasurements();
+    return;
+  }
+
+  pickStation(stationId.value);
 }
 
 function reloadMeasurements(): void {
@@ -428,13 +490,6 @@ function exportData() {
   URL.revokeObjectURL(a.href); 
 }
 
-const mapStations = computed(() => { 
-  const located = props.stations.filter(s => s.latitude != null && s.longitude != null); 
-  const xs = located.map(s => Number(s.longitude)); 
-  const ys = located.map(s => Number(s.latitude)); 
-  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys); 
-  return located.map(s => ({ ...s, x: 10 + (Number(s.longitude) - minX) / (maxX - minX || 1) * 65, y: 20 + (maxY - Number(s.latitude)) / (maxY - minY || 1) * 55 })); 
-});
 </script>
 
 <template>
@@ -673,16 +728,18 @@ const mapStations = computed(() => {
         <section class="panel map-panel">
           <div class="section-title">
             <h2>Onde ficam as estações</h2>
-            <p>{{ mapStations.length }} estações com coordenadas</p>
+            <p>Selecione para abrir ou comparar</p>
           </div>
-          <div class="station-map">
-            <span class="map-caption">Mapa esquemático</span>
-            <span class="map-north"><Navigation :size="18" />N</span>
-            <button v-for="s in mapStations" :key="s.id" :class="['map-pin', { current: s.id === stationId }]" :style="{ left: `${s.x}%`, top: `${s.y}%` }" @click="stationId = s.id; reload()">
-              <MapPin /><label><strong>{{ s.name }}</strong><small>{{ s.provider }}</small></label>
-            </button>
-            <p v-if="!mapStations.length" class="empty">Coordenadas não cadastradas.</p>
-          </div>
+          <StationMapBoundary>
+            <StationMap
+              :stations="stations"
+              :comparison-ids="comparisonIds"
+              :current-station-id="stationId"
+              @update:comparison-ids="setComparisonIds"
+              @select-station="pickStation"
+              @open-comparison="view = 'comparison'"
+            />
+          </StationMapBoundary>
         </section>
         <section class="panel stations-panel">
           <div class="section-title">
@@ -690,7 +747,7 @@ const mapStations = computed(() => {
             <p>Escolha uma para ver os dados dela</p>
           </div>
           <div class="stations-list">
-            <button v-for="s in stations" :key="s.id" :class="['station-row', { active: s.id === stationId }]" @click="stationId = s.id; reload()">
+            <button v-for="s in stations" :key="s.id" :class="['station-row', { active: s.id === stationId }]" @click="pickStation(s.id)">
               <i class="dot valid" />
               <div><strong>{{ s.name }}</strong><small>{{ s.provider }}</small></div>
               <div class="station-rating">
@@ -787,7 +844,7 @@ const mapStations = computed(() => {
     <StationComparison
       v-else
       :stations="stations"
-      :selected-station-ids="selectedStationIds"
+      :selected-station-ids="comparisonIds"
       :period-a="periodA"
       :period-b="periodB"
       :series="series"
