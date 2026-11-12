@@ -1,16 +1,16 @@
 <?php
 
 return [
-    // Intervalo esperado entre leituras do datalogger, em minutos.
+    // Intervalo padrão entre leituras, em minutos (usado se o provedor não definir o seu).
     'step_minutes' => 5,
 
-    // Máximo de lacunas sintéticas por interrupção (2016 = 7 dias a cada 5 min).
-    'max_gap_points' => 2016,
+    // Interrupção máxima preenchida com lacunas; o limite em pontos depende do intervalo.
+    'max_gap_days' => 7,
 
     // Fuso usado para decidir o que é "noite". O banco guarda tudo em UTC.
     'local_timezone' => 'America/Sao_Paulo',
 
-    // sensor_measurement_type da API => seção de regras abaixo. O que não estiver aqui é ignorado.
+    // sensor_measurement_type => seção de regras abaixo. O que não estiver aqui é ignorado.
     'measurement_types' => [
         'Air Temperature' => 'temperature',
         'Solar Radiation' => 'radiation',
@@ -38,14 +38,23 @@ return [
         'night_max' => 10.0,          // acima disso à noite: suspeito
     ],
 
+    // Um item por valor de stations.provider. "rules" sobrescreve as regras padrão.
     'providers' => [
         'licor' => [
-            'parser' => 'licor',
-            'step_minutes' => 5, // Licor costuma registrar a cada 5 min
+            'step_minutes' => 5,
+            'rules' => [],
         ],
         'open_meteo' => [
-            'parser' => 'open_meteo',
-            'step_minutes' => 15, // Open-Meteo usa blocos de 15 min
+            'step_minutes' => 15,
+            'rules' => [
+                'temperature' => ['min_samples' => 8],
+            ],
+        ],
+        'wunderground' => [
+            'step_minutes' => 30,
+            'rules' => [
+                'temperature' => ['min_samples' => 4],
+            ],
         ],
     ],
 ];

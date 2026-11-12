@@ -7,8 +7,8 @@ use App\Enums\QualityFlag;
 /** Memória de uma série (sensor + tipo de dado) enquanto as leituras são classificadas em ordem. */
 final class SeriesContext
 {
-    /** Tolerância, em segundos, ao comparar com a "leitura imediatamente anterior". */
-    private const TOLERANCE = 30;
+    /** Tolerância mínima, em segundos, ao comparar com a "leitura imediatamente anterior". */
+    private const MIN_TOLERANCE = 30;
 
     /**
      * @param  list<array{0:int,1:float}>  $history  pares [timestamp unix, valor] das leituras válidas
@@ -18,22 +18,26 @@ final class SeriesContext
         private ?QualityFlag $previousFlag = null,
         private ?float $previousValue = null,
         private array $history = [],
-    ) {
-    }
+    ) {}
 
     public function previousTimestamp(): ?int
     {
         return $this->previousTs;
     }
 
-    /** Valor da leitura anterior, só se ela veio um passo antes e foi classificada como válida. */
+    /**
+     * Valor da leitura anterior, só se ela veio um passo antes e foi classificada como válida.
+     * A tolerância é de meio passo (mínimo de 30 s), para aceitar pequenas variações no horário.
+     */
     public function previousValidValue(int $ts, int $stepSeconds): ?float
     {
         if ($this->previousTs === null || $this->previousFlag !== QualityFlag::Valid) {
             return null;
         }
 
-        return abs(($ts - $this->previousTs) - $stepSeconds) <= self::TOLERANCE ? $this->previousValue : null;
+        $tolerance = max(self::MIN_TOLERANCE, intdiv($stepSeconds, 2));
+
+        return abs(($ts - $this->previousTs) - $stepSeconds) <= $tolerance ? $this->previousValue : null;
     }
 
     /** @return array{mean: float, sd: float, n: int}|null */

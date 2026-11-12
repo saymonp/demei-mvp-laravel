@@ -441,7 +441,6 @@ const mapStations = computed(() => {
   <main class="dashboard bg-slate-200" :aria-busy="busy">
     <header class="topbar">
       <div class="brand">
-        <img src="/images/novalogodemei.png" alt="DEMEI" class="h-12 w-auto object-contain" />
         Dashboard Meteorológica
       </div>
       
@@ -560,7 +559,7 @@ const mapStations = computed(() => {
     <section v-if="view === 'overview' && stations.length >= 2" class="panel mx-auto grid max-w-6xl gap-5 p-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
       <div class="space-y-3">
         <div>
-          <p class="text-xs font-semibold uppercase tracking-wide text-sky-700">Novidade</p>
+          <p class="text-xs font-semibold uppercase tracking-wide text-sky-700"></p>
           <h2 class="mt-1 text-lg font-extrabold">Compare estações e períodos</h2>
           <p class="mt-1 text-sm text-slate-600">Analise até quatro estações, compare intervalos e revise a qualidade das medições em um só lugar.</p>
         </div>

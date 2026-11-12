@@ -14,8 +14,8 @@ class StationSeeder extends Seeder
     {
         Station::updateOrCreate(
             // Condição de busca (procura pela estação com este nome)
-            ['name' => 'unijui_gaic'], 
-            
+            ['name' => 'unijui_gaic'],
+
             // Dados a serem inseridos ou atualizados
             [
                 'api_url' => env('LICOR_API_URL', 'https://api.licor.cloud/v1/data'),
@@ -30,17 +30,47 @@ class StationSeeder extends Seeder
 
         Station::updateOrCreate(
             // Condição de busca (procura pela estação com este nome)
-            ['name' => 'open_meteo'], 
-            
+            ['name' => 'open_meteo'],
+
             // Dados a serem inseridos ou atualizados
             [
                 'api_url' => env('OPENMETEO_API_URL', 'https://api.open-meteo.com/v1/forecast'),
                 'provider' => 'open_meteo',
-                'bearer_token' => env('OPENMETEO_BEARER_TOKEN', ""),
+                'bearer_token' => env('OPENMETEO_BEARER_TOKEN', ''),
                 'latitude' => env('OPENMETEO_LATITUDE', '-28.30'),
                 'longitude' => env('OPENMETEO_LONGITUDE', '-54.26'),
                 'is_active' => true,
             ]
         );
+
+        $wundergroundStations = [
+            [
+                'name' => 'ijui_pws_iiiju3',
+                'station_id' => 'IIJU3',
+                'latitude' => -28.353,
+                'longitude' => -53.836,
+            ],
+            [
+                'name' => 'ijui_pws_iiiju2',
+                'station_id' => 'IIJU2',
+                'latitude' => -28.391,
+                'longitude' => -53.926,
+            ],
+        ];
+
+        foreach ($wundergroundStations as $station) {
+            Station::updateOrCreate(
+                ['name' => $station['name']],
+                [
+                    'api_url' => "https://www.wunderground.com/dashboard/pws/{$station['station_id']}",
+                    'provider' => 'wunderground',
+                    'bearer_token' => env('WUNDERGROUND_BEARER_TOKEN', ''),
+                    'loggers' => $station['station_id'],
+                    'latitude' => $station['latitude'],
+                    'longitude' => $station['longitude'],
+                    'is_active' => true,
+                ],
+            );
+        }
     }
 }

@@ -36,11 +36,16 @@ return [
     ],
 
     'licor' => [
-    'url' => env('LICOR_API_URL'),
-    'token' => env('LICOR_BEARER_TOKEN'),
-    'loggers' => array_filter(
-        explode(',', env('LICOR_LOGGERS', ''))
-    ),
-],
+        'url' => env('LICOR_API_URL'),
+        'token' => env('LICOR_BEARER_TOKEN'),
+        'loggers' => array_filter(
+            explode(',', env('LICOR_LOGGERS', ''))
+        ),
+    ],
+
+    'wunderground' => [
+        'key' => env('WUNDERGROUND_PUBLIC_KEY'),
+        'url' => env('WUNDERGROUND_API_URL', 'https://api.weather.com/v2/pws/observations/current'),
+    ],
 
 ];

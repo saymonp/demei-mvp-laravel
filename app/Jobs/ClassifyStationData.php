@@ -12,6 +12,7 @@ use App\Services\Quality\ProviderProfile;
 use App\Services\Quality\QualityClassifier;
 use App\Services\Quality\Reading;
 use App\Services\Quality\SeriesContext;
+use App\Services\Quality\UnsupportedProviderException;
 use Carbon\CarbonImmutable;
 use Illuminate\Bus\Batchable;
 use Illuminate\Bus\Queueable;
@@ -50,10 +51,20 @@ class ClassifyStationData implements ShouldQueue
 
     public function handle(PayloadReader $reader, QualityClassifier $classifier, GapFiller $gaps): void
     {
+        if ($this->batch()?->cancelled()) {
+            return;
+        }
+
         $raw = $this->rawData;
 
-        // Obtém o perfil dinâmico da estação (ex: licor ou open_meteo)[cite: 2]
-        $profile = ProviderProfile::for($raw->station->provider);
+        try {
+            $profile = ProviderProfile::for($raw->station->provider);
+        } catch (UnsupportedProviderException $e) {
+            Log::error("Coleta bruta #{$raw->id}: {$e->getMessage()}");
+            $this->fail($e);
+
+            return;
+        }
 
         $series = $reader->seriesFrom($raw);
 
@@ -68,29 +79,39 @@ class ClassifyStationData implements ShouldQueue
         $totals = [0 => 0, 1 => 0, 2 => 0, 3 => 0];
 
         foreach ($series as $readings) {
+            if ($this->batch()?->cancelled()) {
+                return;
+            }
+
             $context = $this->loadContext($raw->station_id, $readings[0]);
 
             foreach ($readings as $reading) {
+                if ($this->batch()?->cancelled()) {
+                    return;
+                }
+
                 $previousTs = $context->previousTimestamp();
                 $readingTimestamp = $reading->timestamp->setTimezone('UTC');
 
-                // Detecta lacunas considerando o intervalo (step) específico do provedor da estação[cite: 2]
                 if ($previousTs !== null) {
                     $from = CarbonImmutable::createFromTimestampUTC($previousTs);
 
                     foreach ($gaps->missingBetween($from, $readingTimestamp, $profile->stepSeconds()) as $missingAt) {
-                        $missingUtc = $missingAt->setTimezone('UTC');
-                        $rows[] = $this->row($raw, $reading, $missingUtc, null, $reading->unit, QualityFlag::Missing, FlagReason::Gap, $now);
+                        $rows[] = $this->row($raw, $reading, $missingAt->setTimezone('UTC'), null, $reading->unit, QualityFlag::Missing, FlagReason::Gap, $now);
                         $totals[QualityFlag::Missing->value]++;
                     }
                 }
 
-                $result = $classifier->classify($reading, $context);
+                $result = $classifier->classify($reading, $context, $profile);
                 $rows[] = $this->row($raw, $reading, $readingTimestamp, $reading->value, $reading->unit, $result->flag, $result->reason, $now);
                 $totals[$result->flag->value]++;
 
                 $context->record($readingTimestamp->timestamp, $reading->value, $result->flag);
             }
+        }
+
+        if ($this->batch()?->cancelled()) {
+            return;
         }
 
         DB::transaction(function () use ($rows) {

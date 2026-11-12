@@ -14,9 +14,9 @@ final class GapFiller
      */
     public function missingBetween(CarbonImmutable $previous, CarbonImmutable $next, ?int $stepSeconds = null): array
     {
-        // Usa o step específico da estação ou o padrão do arquivo de config
+        // Usa o passo específico do provedor ou o padrão do arquivo de config.
         $step = $stepSeconds ?? ((int) config('station-quality.step_minutes') * 60);
-        $cap = (int) config('station-quality.max_gap_points');
+        $cap = $this->cap($step);
         $limit = $next->timestamp - intdiv($step, 2); // meio passo de tolerância
 
         $points = [];
@@ -31,5 +31,17 @@ final class GapFiller
         }
 
         return $points;
+    }
+
+    /** Limite em dias (independe do passo). Também aceita a antiga chave em pontos. */
+    private function cap(int $step): int
+    {
+        $days = config('station-quality.max_gap_days');
+
+        if ($days !== null) {
+            return intdiv((int) $days * 86400, $step);
+        }
+
+        return (int) config('station-quality.max_gap_points', 2016);
     }
 }

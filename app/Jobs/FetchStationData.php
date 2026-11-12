@@ -63,6 +63,7 @@ class FetchStationData implements ShouldQueue
         return match ($this->station->provider) {
             'licor' => $this->fetchLicor(),
             'open_meteo' => $this->fetchOpenMeteo(),
+            'wunderground' => $this->fetchWunderground(),
             default => throw new RuntimeException(
                 "Fonte não suportada: {$this->station->provider}"
             ),
@@ -94,6 +95,30 @@ class FetchStationData implements ShouldQueue
                 'past_minutely_15' => 2,
                 'forecast_minutely_15' => 0,
                 'timezone' => 'America/Sao_Paulo',
+            ]);
+
+        return $response->throw()->json();
+    }
+
+    private function fetchWunderground(): array
+    {
+        $apiKey = config('services.wunderground.key');
+
+        if (! is_string($apiKey) || $apiKey === '') {
+            throw new RuntimeException('A chave WUNDERGROUND_PUBLIC_KEY não está configurada.');
+        }
+
+        if (! is_string($this->station->loggers) || $this->station->loggers === '') {
+            throw new RuntimeException("A estação {$this->station->name} não tem um station ID configurado.");
+        }
+
+        $response = Http::acceptJson()
+            ->timeout(30)
+            ->get(config('services.wunderground.url'), [
+                'stationId' => $this->station->loggers,
+                'format' => 'json',
+                'units' => 'm',
+                'apiKey' => $apiKey,
             ]);
 
         return $response->throw()->json();

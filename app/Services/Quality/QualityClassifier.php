@@ -7,11 +7,11 @@ use App\Enums\QualityFlag;
 
 /**
  * Regras de qualidade. Ordem de precedência: inválido > suspeito > válido.
- * Os limites ficam em config/station-quality.php.
+ * Os limites vêm de config/station-quality.php, combinados com os ajustes do provedor.
  */
 final class QualityClassifier
 {
-    public function classify(Reading $reading, SeriesContext $context): Classification
+    public function classify(Reading $reading, SeriesContext $context, ProviderProfile $profile): Classification
     {
         if ($reading->value === null) {
             return new Classification(QualityFlag::Missing, FlagReason::MissingValue);
@@ -22,15 +22,15 @@ final class QualityClassifier
         }
 
         return match ($reading->type) {
-            Reading::TEMPERATURE => $this->temperature($reading, $context),
-            Reading::RADIATION => $this->radiation($reading, $context),
+            Reading::TEMPERATURE => $this->temperature($reading, $context, $profile),
+            Reading::RADIATION => $this->radiation($reading, $context, $profile),
             default => Classification::valid(),
         };
     }
 
-    private function temperature(Reading $r, SeriesContext $ctx): Classification
+    private function temperature(Reading $r, SeriesContext $ctx, ProviderProfile $profile): Classification
     {
-        $c = config('station-quality.temperature');
+        $c = $profile->rules('temperature');
         $v = $r->value;
         $ts = $r->timestamp->timestamp;
 
@@ -40,7 +40,7 @@ final class QualityClassifier
         }
 
         // 2. Variação brusca em relação à leitura imediatamente anterior (se válida)
-        $previous = $ctx->previousValidValue($ts, $this->stepSeconds());
+        $previous = $ctx->previousValidValue($ts, $profile->stepSeconds());
         if ($previous !== null && abs($v - $previous) > $c['spike_delta']) {
             return new Classification(QualityFlag::Suspect, FlagReason::Spike);
         }
@@ -59,9 +59,9 @@ final class QualityClassifier
         return Classification::valid();
     }
 
-    private function radiation(Reading $r, SeriesContext $ctx): Classification
+    private function radiation(Reading $r, SeriesContext $ctx, ProviderProfile $profile): Classification
     {
-        $c = config('station-quality.radiation');
+        $c = $profile->rules('radiation');
         $v = $r->value;
         $ts = $r->timestamp->timestamp;
 
@@ -77,12 +77,12 @@ final class QualityClassifier
         }
 
         // 3. Radiação anômala de madrugada
-        if ($v > $c['night_max'] && $this->isNight($r)) {
+        if ($v > $c['night_max'] && $this->isNight($r, $c)) {
             return new Classification(QualityFlag::Suspect, FlagReason::NightRadiation);
         }
 
         // 4. Variação brusca em relação à leitura imediatamente anterior (se válida)
-        $previous = $ctx->previousValidValue($ts, $this->stepSeconds());
+        $previous = $ctx->previousValidValue($ts, $profile->stepSeconds());
         if ($previous !== null && abs($v - $previous) > $c['spike_delta']) {
             return new Classification(QualityFlag::Suspect, FlagReason::Spike);
         }
@@ -90,16 +90,10 @@ final class QualityClassifier
         return Classification::valid();
     }
 
-    private function isNight(Reading $r): bool
+    private function isNight(Reading $r, array $rules): bool
     {
-        $c = config('station-quality.radiation');
         $hour = (int) $r->timestamp->setTimezone(config('station-quality.local_timezone'))->format('G');
 
-        return $hour >= $c['night_start_hour'] || $hour < $c['night_end_hour'];
-    }
-
-    private function stepSeconds(): int
-    {
-        return (int) config('station-quality.step_minutes') * 60;
+        return $hour >= $rules['night_start_hour'] || $hour < $rules['night_end_hour'];
     }
 }
