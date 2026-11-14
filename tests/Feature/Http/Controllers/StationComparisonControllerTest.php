@@ -42,6 +42,7 @@ class StationComparisonControllerTest extends TestCase
         $station = $this->createStation('Ijuí');
         $secondStation = $this->createStation('Panambi');
         $measurement = $this->createMeasurement($station, '2026-10-14 12:00:00');
+        $this->createMeasurement($station, '2026-10-14 12:00:00', 'AVERAGE');
 
         $response = $this->actingAs($user)
             ->get(route('stations.compare', [
@@ -218,7 +219,8 @@ class StationComparisonControllerTest extends TestCase
                 'end' => '2026-10-14',
             ]))
             ->assertInertia(fn (Assert $page) => $page
-                ->has("series.{$station->id}", 2)
+                ->has("series.{$station->id}", 1)
+                ->where("series.{$station->id}.0.measurement_id", $current->id)
                 ->where("overrides.{$station->id}|measurement|{$current->id}", QualityFlag::Invalid->value)
                 ->where("overrides.{$station->id}|measurement|{$average->id}", QualityFlag::Suspect->value));
 

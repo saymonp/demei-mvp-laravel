@@ -70,6 +70,7 @@ class StationController extends Controller
         $end = $start->setTimezone('America/Sao_Paulo')->addDay()->utc();
         $measurementRows = $stationId === null ? collect() : Measurement::query()
             ->where('station_id', $stationId)
+            ->where('data_type', 'CURRENT')
             ->where('timestamp', '>=', $start)
             ->where('timestamp', '<', $end)
             ->orderBy('timestamp')

@@ -49,6 +49,17 @@ class StationControllerTest extends TestCase
             'unit' => '°C',
             'quality_flag' => QualityFlag::Valid,
         ]);
+        Measurement::query()->create([
+            'station_id' => $station->id,
+            'logger_sn' => 'logger-1',
+            'sensor_sn' => 'sensor-1',
+            'sensor_measurement_type' => 'Air Temperature',
+            'data_type' => 'AVERAGE',
+            'timestamp' => '2026-10-14 12:00:00',
+            'value' => 28.5,
+            'unit' => '°C',
+            'quality_flag' => QualityFlag::Valid,
+        ]);
         DB::table('measurement_overrides')->insert([
             'measurement_id' => $measurement->id,
             'station_id' => $station->id,
@@ -72,10 +83,12 @@ class StationControllerTest extends TestCase
                 ->where('selectedStationIds', [$station->id, $secondStation->id])
                 ->where('periodA.start', '2026-10-14')
                 ->where('periodA.end', '2026-10-14')
+                ->has('measurements', 1)
                 ->where('measurements.0.measurement_id', $measurement->id)
                 ->where('measurements.0.quality_flag', QualityFlag::Suspect->value)
                 ->where('measurements.0.audited', true)
                 ->where('measurements.0.original_flag', QualityFlag::Valid->value)
+                ->has("series.{$station->id}", 1)
                 ->where("series.{$station->id}.0.measurement_id", $measurement->id)
                 ->where("overrides.{$station->id}|measurement|{$measurement->id}", QualityFlag::Suspect->value));
     }

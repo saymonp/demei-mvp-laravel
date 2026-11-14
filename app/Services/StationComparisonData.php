@@ -40,6 +40,7 @@ class StationComparisonData
 
         return Measurement::query()
             ->whereIn('station_id', $stationIds)
+            ->where('data_type', 'CURRENT')
             ->where('timestamp', '>=', $start)->where('timestamp', '<', $end)
             ->orderBy('timestamp')
             ->get(['id', 'station_id', 'timestamp', 'sensor_measurement_type', 'value', 'quality_flag', 'flag_reason'])
