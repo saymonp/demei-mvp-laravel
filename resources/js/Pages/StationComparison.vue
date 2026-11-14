@@ -57,7 +57,8 @@ const layout = ref<'overlay' | 'split'>('overlay');
 const metric = ref<'temp' | 'rad'>('temp');
 
 const selected = computed(() => selectedIds.value.map(id => props.stations.find(s => s.id === id)!).filter(Boolean));
-const useDemo = computed(() => !props.embedded && Object.keys(props.series).length === 0);
+const hasSeriesData = computed(() => Object.values(props.series).some(rows => rows.length > 0));
+const useDemo = computed(() => import.meta.env.DEV && !props.embedded && !hasSeriesData.value);
 const raw = (id: number, b = false) => useDemo.value ? demoSeries(id, b ? periodB.value : periodA.value) : (b ? props.seriesB : props.series)[id] ?? [];
 
 watch(() => props.selectedStationIds, ids => {
@@ -170,6 +171,10 @@ watch([selectedIds, periodA, periodB, compareMode], () => {
         </div>
         <PeriodSelector v-model:period-a="periodA" v-model:period-b="periodB" v-model:compare="compareMode" />
       </section>
+
+      <p v-if="!useDemo && !hasSeriesData" class="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 text-sm text-slate-500">
+        Nenhuma das estações selecionadas tem leituras no período escolhido.
+      </p>
 
       <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StationSummaryCard v-for="(s, i) in selected" :key="s.id" :station="s" :color="STATION_COLORS[i]" :summary="summaries[s.id]" :previous="compareMode ? summariesB[s.id] : null" />
