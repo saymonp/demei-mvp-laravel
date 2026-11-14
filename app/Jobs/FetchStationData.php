@@ -17,6 +17,8 @@ class FetchStationData implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    private const OPEN_METEO_API_URL = 'https://api.open-meteo.com/v1/forecast';
+
     public $timeout = 60;
 
     public $tries = 3;
@@ -62,7 +64,7 @@ class FetchStationData implements ShouldQueue
     {
         return match ($this->station->provider) {
             'licor' => $this->fetchLicor(),
-            'open_meteo' => $this->fetchOpenMeteo(),
+            'open_meteo' => $this->fetchOpenMeteo($this->station->api_url),
             'wunderground' => $this->fetchWunderground(),
             default => throw new RuntimeException(
                 "Fonte não suportada: {$this->station->provider}"
@@ -84,11 +86,11 @@ class FetchStationData implements ShouldQueue
         return $response->throw()->json();
     }
 
-    private function fetchOpenMeteo(): array
+    private function fetchOpenMeteo(string $url): array
     {
         $response = Http::acceptJson()
             ->timeout(30)
-            ->get($this->station->api_url, [
+            ->get($url, [
                 'latitude' => $this->station->latitude,
                 'longitude' => $this->station->longitude,
                 'minutely_15' => 'temperature_2m,shortwave_radiation',
@@ -120,6 +122,21 @@ class FetchStationData implements ShouldQueue
                 'units' => 'm',
                 'apiKey' => $apiKey,
             ]);
+
+        if (in_array($response->status(), [401, 403], true)) {
+            Log::warning(
+                "Weather Underground recusou a autenticação da estação {$this->station->name}; usando Open-Meteo.",
+                [
+                    'station_id' => $this->station->id,
+                    'http_status' => $response->status(),
+                ],
+            );
+
+            return [
+                ...$this->fetchOpenMeteo(self::OPEN_METEO_API_URL),
+                '_source_provider' => 'open_meteo',
+            ];
+        }
 
         return $response->throw()->json();
     }

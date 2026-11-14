@@ -21,6 +21,19 @@ class StationRawData extends Model
         return $this->belongsTo(Station::class);
     }
 
+    public function sourceProvider(): ?string
+    {
+        if (
+            $this->station->provider === 'wunderground'
+            && is_array($this->payload)
+            && ($this->payload['_source_provider'] ?? null) === 'open_meteo'
+        ) {
+            return 'open_meteo';
+        }
+
+        return $this->station->provider;
+    }
+
     public function measurements(): HasMany
     {
         return $this->hasMany(Measurement::class, 'station_raw_data_id');

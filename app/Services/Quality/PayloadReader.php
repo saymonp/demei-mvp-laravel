@@ -18,7 +18,7 @@ class PayloadReader
      */
     public function seriesFrom(StationRawData $rawData): array
     {
-        $profile = ProviderProfile::for($rawData->station->provider);
+        $profile = ProviderProfile::for($rawData->sourceProvider());
         $payload = $this->decode($rawData->payload);
 
         $readings = match ($profile->provider) {

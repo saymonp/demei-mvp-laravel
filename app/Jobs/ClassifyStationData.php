@@ -58,7 +58,7 @@ class ClassifyStationData implements ShouldQueue
         $raw = $this->rawData;
 
         try {
-            $profile = ProviderProfile::for($raw->station->provider);
+            $profile = ProviderProfile::for($raw->sourceProvider());
         } catch (UnsupportedProviderException $e) {
             Log::error("Coleta bruta #{$raw->id}: {$e->getMessage()}");
             $this->fail($e);

@@ -122,6 +122,34 @@ class ClassifyStationDataTest extends TestCase
         $this->assertDatabaseMissing('measurements', ['sensor_sn' => 'wunderground-rad-sensor']);
     }
 
+    public function test_wunderground_open_meteo_fallback_uses_the_open_meteo_profile(): void
+    {
+        $rawData = $this->station('wunderground', 'IIJU2')->rawData()->create([
+            'payload' => [
+                '_source_provider' => 'open_meteo',
+                'timezone' => 'America/Sao_Paulo',
+                'utc_offset_seconds' => -10800,
+                'minutely_15' => [
+                    'time' => ['2026-10-13T13:45', '2026-10-13T14:15'],
+                    'temperature_2m' => [24.0, 24.5],
+                ],
+            ],
+        ]);
+
+        $this->classify($rawData);
+
+        $this->assertDatabaseHas('measurements', [
+            'sensor_sn' => 'open-meteo-temp-sensor',
+            'timestamp' => '2026-10-13 17:00:00',
+            'quality_flag' => QualityFlag::Missing->value,
+        ]);
+        $this->assertDatabaseHas('measurements', [
+            'sensor_sn' => 'open-meteo-temp-sensor',
+            'timestamp' => '2026-10-13 17:15:00',
+            'value' => 24.5,
+        ]);
+    }
+
     public function test_cancelled_batch_does_not_write_measurements(): void
     {
         $rawData = $this->station('licor')->rawData()->create([
