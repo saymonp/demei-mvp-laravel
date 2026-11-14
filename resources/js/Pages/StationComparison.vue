@@ -85,16 +85,16 @@ const classifiedB = computed(() => compareMode.value ? Object.fromEntries(select
 const metricMeta = computed(() => ({ temp: { type: TEMP, unit: '°C', title: 'Temperatura do ar' }, rad: { type: RAD, unit: 'W/m²', title: 'Irradiância solar' } }[metric.value]));
 const multiDay = computed(() => periodA.value.start !== periodA.value.end);
 
-const overlayOption = computed(() => multiLineOptions(stationLines(selected.value, STATION_COLORS, classified.value, metricMeta.value.type), { unit: metricMeta.value.unit, multiDay: multiDay.value }));
+const overlayOption = computed(() => multiLineOptions(stationLines(selected.value, STATION_COLORS, classified.value, metricMeta.value.type, periodA.value.start), { unit: metricMeta.value.unit, multiDay: multiDay.value }));
 const splitOptions = computed(() => [
   { key: 'temp', icon: Thermometer, title: 'Temperatura', type: TEMP, unit: '°C' },
   { key: 'rad', icon: Sun, title: 'Irradiância', type: RAD, unit: 'W/m²' },
-].map(m => ({ ...m, option: multiLineOptions(stationLines(selected.value, STATION_COLORS, classified.value, m.type), { unit: m.unit, multiDay: multiDay.value }) })));
+].map(m => ({ ...m, option: multiLineOptions(stationLines(selected.value, STATION_COLORS, classified.value, m.type, periodA.value.start), { unit: m.unit, multiDay: multiDay.value }) })));
 
-// Overlay Período A x Período B (linha cheia = A, tracejada = B), alinhado por índice.
+// Overlay Período A x Período B (linha cheia = A, tracejada = B).
 const periodOption = computed(() => multiLineOptions(selected.value.flatMap((s, i) => [
-  { name: `${s.name} · A`, color: STATION_COLORS[i], points: (classified.value[s.id] ?? []).filter(p => p.sensor_measurement_type === metricMeta.value.type) },
-  { name: `${s.name} · B`, color: STATION_COLORS[i], dashed: true, points: (classifiedB.value[s.id] ?? []).filter(p => p.sensor_measurement_type === metricMeta.value.type) },
+  { name: `${s.name} · A`, color: STATION_COLORS[i], points: (classified.value[s.id] ?? []).filter(p => p.sensor_measurement_type === metricMeta.value.type), origin: periodA.value.start },
+  { name: `${s.name} · B`, color: STATION_COLORS[i], dashed: true, points: (classifiedB.value[s.id] ?? []).filter(p => p.sensor_measurement_type === metricMeta.value.type), origin: periodB.value.start },
 ]), { unit: metricMeta.value.unit, multiDay: true }));
 
 const summaries = computed(() => Object.fromEntries(selected.value.map(s => [s.id, summarize(classified.value[s.id] ?? [])])));
