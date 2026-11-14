@@ -42,22 +42,28 @@ export function demoSeries(stationId: number, period: Period): Measurement[] {
  * Reclassificação no cliente (espelha a regra de variação do QualityClassifier):
  * - value null            -> Lacuna (3)
  * - flag original 1        -> mantém Inválido (faixa física, decidido no backend)
- * - |Δ| vs último válido > limiar -> Suspeito (2)
+ * - suspeitas do servidor, exceto spike -> mantém Suspeito (2)
+ * - |Δ| vs leitura válida em até 1 hora > limiar -> Suspeito (2)
  * - caso contrário        -> Válido (0)
  * Overrides manuais (auditoria) sempre vencem.
  */
 export function reclassify(stationId: number, rows: Measurement[], t: Thresholds, overrides: OverrideMap): ClassifiedPoint[] {
-  const last: Record<string, number | undefined> = {};
+  const last: Record<string, { value: number; ts: number } | undefined> = {};
+  const MAX_DISTANCE_MS = 60 * 60 * 1000;
+
   return [...rows].sort((a, b) => a.timestamp.localeCompare(b.timestamp)).map(r => {
     const limit = r.sensor_measurement_type === TEMP ? t.maxTempDelta : t.maxRadDelta;
+    const ts = Date.parse(r.timestamp);
     let flag: Quality; let reason = r.flag_reason;
+
     if (r.value === null) flag = 3;
     else if (r.quality_flag === 1) flag = 1;
+    else if (r.quality_flag === 2 && r.flag_reason !== 'spike') flag = 2;
     else {
       const prev = last[r.sensor_measurement_type];
-      if (prev !== undefined && Math.abs(r.value - prev) > limit) { flag = 2; reason = `Variação > ${limit}`; }
+      if (prev && ts - prev.ts <= MAX_DISTANCE_MS && Math.abs(r.value - prev.value) > limit) { flag = 2; reason = `Variação > ${limit}`; }
       else { flag = 0; reason = undefined; }
-      if (flag === 0) last[r.sensor_measurement_type] = r.value;
+      if (flag === 0) last[r.sensor_measurement_type] = { value: r.value, ts };
     }
     const key = overrideKey(stationId, r);
     if (key in overrides) return { ...r, station_id: stationId, quality_flag: overrides[key], original_flag: flag, flag_reason: reason, audited: true };
