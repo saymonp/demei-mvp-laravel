@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\DB;
 
 class StationComparisonData
 {
+    public const MAX_CHUNK_DAYS = 7;
+
     /**
      * @param  array<int, int>  $stationIds
      * @param  array{start: string, end: string}  $periodA
@@ -16,17 +18,45 @@ class StationComparisonData
      */
     public function props(array $stationIds, array $periodA, ?array $periodB): array
     {
+        $requiresChunking = $this->requiresChunking($periodA)
+            || ($periodB !== null && $this->requiresChunking($periodB));
+
         return [
             'selectedStationIds' => $stationIds,
             'periodA' => $periodA,
             'periodB' => $periodB,
-            'series' => fn (): array => $this->series($stationIds, $periodA),
-            'seriesB' => fn (): array => $periodB ? $this->series($stationIds, $periodB) : [],
-            'overrides' => fn (): array => $this->overrides(
+            'requiresChunking' => $requiresChunking,
+            'series' => fn (): array => $requiresChunking ? [] : $this->series($stationIds, $periodA),
+            'seriesB' => fn (): array => $requiresChunking || $periodB === null ? [] : $this->series($stationIds, $periodB),
+            'overrides' => fn (): array => $requiresChunking ? [] : $this->overrides(
                 $stationIds,
-                $periodB ? [$periodA, $periodB] : [$periodA],
+                $periodB === null ? [$periodA] : [$periodA, $periodB],
             ),
         ];
+    }
+
+    /**
+     * @param  array<int, int>  $stationIds
+     * @param  array{start: string, end: string}  $period
+     * @return array{series: array<int, array<int, array<string, mixed>>>, overrides: array<string, int>}
+     */
+    public function chunk(array $stationIds, array $period): array
+    {
+        return [
+            'series' => $this->series($stationIds, $period),
+            'overrides' => $this->overrides($stationIds, [$period]),
+        ];
+    }
+
+    /**
+     * @param  array{start: string, end: string}  $period
+     */
+    public function requiresChunking(array $period): bool
+    {
+        $start = CarbonImmutable::createFromFormat('!Y-m-d', $period['start'], 'America/Sao_Paulo');
+        $end = CarbonImmutable::createFromFormat('!Y-m-d', $period['end'], 'America/Sao_Paulo');
+
+        return $start->addDays(self::MAX_CHUNK_DAYS - 1)->lessThan($end);
     }
 
     /**
@@ -88,10 +118,6 @@ class StationComparisonData
     {
         $start = CarbonImmutable::createFromFormat('!Y-m-d', $period['start'], 'America/Sao_Paulo');
         $end = CarbonImmutable::createFromFormat('!Y-m-d', $period['end'], 'America/Sao_Paulo')->addDay();
-
-        if ($start->diffInDays($end) > 31) {
-            $end = $start->addDays(31);
-        }
 
         return [$start->utc(), $end->utc()];
     }

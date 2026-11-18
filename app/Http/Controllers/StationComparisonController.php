@@ -6,9 +6,11 @@ use App\Models\Measurement;
 use App\Models\Station;
 use App\Services\StationComparisonData;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -35,6 +37,28 @@ class StationComparisonController extends Controller
             'stations' => $stations,
             'canAudit' => $request->user() !== null,
         ], $comparisonData->props($ids->all(), $periodA, $periodB)));
+    }
+
+    public function series(Request $request, StationComparisonData $comparisonData): JsonResponse
+    {
+        $v = $request->validate([
+            'stations' => ['required', 'array', 'min:2', 'max:4'],
+            'stations.*' => ['integer', 'exists:stations,id'],
+            'start' => ['required', 'date_format:Y-m-d'],
+            'end' => ['required', 'date_format:Y-m-d', 'after_or_equal:start'],
+        ]);
+        $period = ['start' => $v['start'], 'end' => $v['end']];
+
+        if ($comparisonData->requiresChunking($period)) {
+            throw ValidationException::withMessages([
+                'end' => 'Cada consulta pode abranger no máximo '.StationComparisonData::MAX_CHUNK_DAYS.' dias.',
+            ]);
+        }
+
+        return response()->json($comparisonData->chunk(
+            array_map('intval', $v['stations']),
+            $period,
+        ));
     }
 
     public function override(Request $request): RedirectResponse

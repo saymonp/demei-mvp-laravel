@@ -1,17 +1,39 @@
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue';
 import { CalendarRange, GitCompareArrows } from '@lucide/vue';
 import { previousPeriod, type Period } from '../../weather/compare';
 
 const periodA = defineModel<Period>('periodA', { required: true });
 const periodB = defineModel<Period>('periodB', { required: true });
 const compare = defineModel<boolean>('compare', { default: false });
+const draftA = ref<Period>({ ...periodA.value });
+const draftB = ref<Period>({ ...periodB.value });
+const draftCompare = ref(compare.value);
 
 function toggleCompare() {
-  compare.value = !compare.value;
-  if (compare.value) periodB.value = previousPeriod(periodA.value);
+  draftCompare.value = !draftCompare.value;
+  if (draftCompare.value) draftB.value = previousPeriod(draftA.value);
 }
-const setA = (k: keyof Period, v: string) => { periodA.value = { ...periodA.value, [k]: v }; };
-const setB = (k: keyof Period, v: string) => { periodB.value = { ...periodB.value, [k]: v }; };
+const validPeriod = (period: Period) => Boolean(period.start && period.end && period.start <= period.end);
+const hasChanges = computed(() => draftA.value.start !== periodA.value.start
+  || draftA.value.end !== periodA.value.end
+  || draftCompare.value !== compare.value
+  || (draftCompare.value && (draftB.value.start !== periodB.value.start || draftB.value.end !== periodB.value.end)));
+const canApply = computed(() => validPeriod(draftA.value)
+  && (!draftCompare.value || validPeriod(draftB.value))
+  && hasChanges.value);
+
+function apply() {
+  if (!canApply.value) return;
+
+  periodA.value = { ...draftA.value };
+  if (draftCompare.value) periodB.value = { ...draftB.value };
+  compare.value = draftCompare.value;
+}
+
+watch(periodA, value => { draftA.value = { ...value }; }, { deep: true });
+watch(periodB, value => { draftB.value = { ...value }; }, { deep: true });
+watch(compare, value => { draftCompare.value = value; });
 const input = 'rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 py-1.5 text-sm';
 </script>
 
@@ -20,26 +42,31 @@ const input = 'rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 
     <div>
       <p class="mb-1 flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500"><CalendarRange :size="12" /> Período A</p>
       <div class="flex items-center gap-1.5">
-        <input type="date" :class="input" :value="periodA.start" :max="periodA.end" @change="setA('start', ($event.target as HTMLInputElement).value)" aria-label="Data inicial" />
+        <input v-model="draftA.start" type="date" :class="input" :max="draftA.end" aria-label="Data inicial" />
         <span class="text-slate-400">→</span>
-        <input type="date" :class="input" :value="periodA.end" :min="periodA.start" @change="setA('end', ($event.target as HTMLInputElement).value)" aria-label="Data final" />
+        <input v-model="draftA.end" type="date" :class="input" :min="draftA.start" aria-label="Data final" />
       </div>
     </div>
 
-    <button type="button" role="switch" :aria-checked="compare" @click="toggleCompare"
-      :class="['flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-semibold transition', compare ? 'bg-[var(--primary)] text-white shadow' : 'bg-[var(--secondary)] text-[var(--foreground)] hover:opacity-80']">
+    <button type="button" role="switch" :aria-checked="draftCompare" @click="toggleCompare"
+      :class="['flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-semibold transition', draftCompare ? 'bg-[var(--primary)] text-white shadow' : 'bg-[var(--secondary)] text-[var(--foreground)] hover:opacity-80']">
       <GitCompareArrows :size="15" /> Comparar Períodos
     </button>
 
     <transition enter-from-class="opacity-0 translate-x-2" enter-active-class="transition">
-      <div v-if="compare">
+      <div v-if="draftCompare">
         <p class="mb-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--primary)]">Comparar com...</p>
         <div class="flex items-center gap-1.5">
-          <input type="date" :class="input" :value="periodB.start" :max="periodB.end" @change="setB('start', ($event.target as HTMLInputElement).value)" aria-label="Data inicial comparação" />
+          <input v-model="draftB.start" type="date" :class="input" :max="draftB.end" aria-label="Data inicial comparação" />
           <span class="text-slate-400">→</span>
-          <input type="date" :class="input" :value="periodB.end" :min="periodB.start" @change="setB('end', ($event.target as HTMLInputElement).value)" aria-label="Data final comparação" />
+          <input v-model="draftB.end" type="date" :class="input" :min="draftB.start" aria-label="Data final comparação" />
         </div>
       </div>
     </transition>
+
+    <button type="button" :disabled="!canApply" @click="apply"
+      class="h-9 rounded-lg bg-[var(--primary)] px-3 text-sm font-semibold text-white shadow transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40">
+      Aplicar período
+    </button>
   </div>
 </template>

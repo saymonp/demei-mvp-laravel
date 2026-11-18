@@ -9,7 +9,7 @@ Visão geral da estação selecionada, com indicadores de temperatura, irradiaç
 
 Permite comparar até quatro estações e diferentes períodos, visualizar gráficos e resumos, ajustar limiares de qualidade e auditar leituras.
 
-![Tela de análise comparativa entre estações](docs/images/dashboard-demo-dados-completos.png)
+![Tela de análise comparativa entre estações](docs/images/comparativo.png)
 
 ### Geração de documentos
 
@@ -168,3 +168,10 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+
+
+docker compose exec app php artisan weather:backfill-open-meteo --all --dry-run
+
+docker compose exec app php artisan weather:backfill-open-meteo --all
+
+docker compose exec app php artisan weather:backfill-open-meteo --station=unijui_gaic

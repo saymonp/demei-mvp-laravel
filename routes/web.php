@@ -4,17 +4,13 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StationComparisonController;
 use App\Http\Controllers\StationController;
 use App\Http\Controllers\StationLatestController;
-use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::get('/', function () {
-    return Inertia::render('Welcome', [
-        'canLogin' => Route::has('login'),
-        'canRegister' => Route::has('register'),
-        'laravelVersion' => Application::VERSION,
-        'phpVersion' => PHP_VERSION,
-    ]);
+    return auth()->check()
+        ? redirect()->route('station-dashboard')
+        : redirect()->route('register');
 });
 
 Route::get('/dashboard', function () {
@@ -32,6 +28,8 @@ Route::middleware('auth')->group(function () {
         ->name('station-dashboard');
     Route::get('/stations/compare', [StationComparisonController::class, 'index'])
         ->name('stations.compare');
+    Route::get('/stations/compare/series', [StationComparisonController::class, 'series'])
+        ->name('stations.compare.series');
     Route::get('/stations/latest', StationLatestController::class)
         ->name('stations.latest');
     Route::post('/stations/measurements/override', [StationComparisonController::class, 'override'])
