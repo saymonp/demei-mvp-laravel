@@ -99,6 +99,34 @@ function periodParams() {
   };
 }
 
+function openComparison(): void {
+  if (props.stations.length < 2) {
+    return;
+  }
+
+  const stationIds = [...comparisonIds.value];
+
+  for (const station of props.stations) {
+    if (stationIds.length >= 2) {
+      break;
+    }
+
+    if (!stationIds.includes(station.id)) {
+      stationIds.push(station.id);
+    }
+  }
+
+  const query = new URLSearchParams();
+
+  stationIds.forEach(id => query.append('stations[]', String(id)));
+
+  for (const [key, value] of Object.entries(periodParams())) {
+    query.set(key, value);
+  }
+
+  window.open(`${route('stations.compare')}?${query.toString()}`, '_blank', 'noopener,noreferrer');
+}
+
 function setComparisonIds(ids: number[]): void {
   comparisonIds.value = ids;
 
@@ -503,7 +531,7 @@ function exportData() {
       <nav class="nav-tabs">
         <button :class="{ active: view === 'overview' }" @click="view = 'overview'">Visão geral</button>
         <button :class="{ active: view === 'logs' }" @click="view = 'logs'">Logs</button>
-        <button :class="{ active: view === 'comparison' }" @click="view = 'comparison'">Análise comparativa</button>
+        <button @click="openComparison">Análise comparativa</button>
         <button @click="openHorizon">Horizon</button>
       </nav>
 
@@ -624,7 +652,7 @@ function exportData() {
           <li class="rounded-full bg-slate-100 px-3 py-1.5">Auditoria de leituras</li>
         </ul>
       </div>
-      <button type="button" class="export-button min-h-11 justify-center px-5 no-underline" @click="view = 'comparison'">
+      <button type="button" class="export-button min-h-11 justify-center px-5 no-underline" @click="openComparison">
         <GitCompareArrows :size="16" />
         Comparar agora
       </button>
@@ -737,7 +765,7 @@ function exportData() {
               :current-station-id="stationId"
               @update:comparison-ids="setComparisonIds"
               @select-station="pickStation"
-              @open-comparison="view = 'comparison'"
+              @open-comparison="openComparison"
             />
           </StationMapBoundary>
         </section>

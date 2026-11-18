@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { Link, router } from '@inertiajs/vue3';
+import { router } from '@inertiajs/vue3';
 import VChart from 'vue-echarts';
 import '../../css/weather-dashboard.css';
 import { use } from 'echarts/core';
@@ -101,6 +101,20 @@ const periodOption = computed(() => multiLineOptions(selected.value.flatMap((s, 
 const summaries = computed(() => Object.fromEntries(selected.value.map(s => [s.id, summarize(classified.value[s.id] ?? [])])));
 const summariesB = computed(() => compareMode.value ? Object.fromEntries(selected.value.map(s => [s.id, summarize(classifiedB.value[s.id] ?? [])])) : {});
 const counts = computed(() => Object.values(classified.value).flat().reduce((acc, p) => { acc[p.quality_flag] = (acc[p.quality_flag] ?? 0) + 1; return acc; }, {} as Record<number, number>));
+const standaloneUrl = computed(() => {
+  const query = new URLSearchParams();
+
+  selectedIds.value.forEach(id => query.append('stations[]', String(id)));
+  query.set('start', periodA.value.start);
+  query.set('end', periodA.value.end);
+
+  if (compareMode.value) {
+    query.set('compare_start', periodB.value.start);
+    query.set('compare_end', periodB.value.end);
+  }
+
+  return `${route('stations.compare')}?${query.toString()}`;
+});
 
 // ---- Auditoria manual -------------------------------------------------------
 const focused = ref<ClassifiedPoint | null>(null);
@@ -155,9 +169,9 @@ watch([selectedIds, periodA, periodB, compareMode], () => {
           <h2 class="text-xl font-extrabold tracking-tight">Comparação entre estações</h2>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <Link v-if="canGenerateReports" :href="route('stations.compare')" class="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--muted)]">
+          <a v-if="canGenerateReports" :href="standaloneUrl" target="_blank" rel="noopener noreferrer" class="rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] hover:bg-[var(--muted)]">
             Abrir tela separada
-          </Link>
+          </a>
           <button type="button" @click="panelOpen = true" class="flex items-center gap-2 rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-semibold text-white shadow transition hover:opacity-90">
             <SlidersHorizontal :size="14" /> Limiares
           </button>

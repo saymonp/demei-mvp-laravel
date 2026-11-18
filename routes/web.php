@@ -4,17 +4,13 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StationComparisonController;
 use App\Http\Controllers\StationController;
 use App\Http\Controllers\StationLatestController;
-use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 Route::get('/', function () {
-    return Inertia::render('Welcome', [
-        'canLogin' => Route::has('login'),
-        'canRegister' => Route::has('register'),
-        'laravelVersion' => Application::VERSION,
-        'phpVersion' => PHP_VERSION,
-    ]);
+    return auth()->check()
+        ? redirect()->route('station-dashboard')
+        : redirect()->route('register');
 });
 
 Route::get('/dashboard', function () {
