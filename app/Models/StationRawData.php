@@ -24,8 +24,7 @@ class StationRawData extends Model
     public function sourceProvider(): ?string
     {
         if (
-            $this->station->provider === 'wunderground'
-            && is_array($this->payload)
+            is_array($this->payload)
             && ($this->payload['_source_provider'] ?? null) === 'open_meteo'
         ) {
             return 'open_meteo';

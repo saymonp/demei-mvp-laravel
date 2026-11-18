@@ -150,6 +150,38 @@ class ClassifyStationDataTest extends TestCase
         ]);
     }
 
+    public function test_licor_open_meteo_backfill_uses_the_open_meteo_profile(): void
+    {
+        $rawData = $this->station('licor')->rawData()->create([
+            'payload' => [
+                '_source_provider' => 'open_meteo',
+                'timezone' => 'America/Sao_Paulo',
+                'utc_offset_seconds' => -10800,
+                'minutely_15' => [
+                    'time' => ['2026-10-13T13:45'],
+                    'temperature_2m' => [24.0],
+                    'shortwave_radiation' => [500.0],
+                ],
+            ],
+        ]);
+
+        $this->classify($rawData);
+
+        $this->assertDatabaseCount('measurements', 2);
+        $this->assertDatabaseHas('measurements', [
+            'station_id' => $rawData->station_id,
+            'sensor_sn' => 'open-meteo-temp-sensor',
+            'timestamp' => '2026-10-13 16:45:00',
+            'value' => 24.0,
+        ]);
+        $this->assertDatabaseHas('measurements', [
+            'station_id' => $rawData->station_id,
+            'sensor_sn' => 'open-meteo-rad-sensor',
+            'timestamp' => '2026-10-13 16:45:00',
+            'value' => 500.0,
+        ]);
+    }
+
     public function test_cancelled_batch_does_not_write_measurements(): void
     {
         $rawData = $this->station('licor')->rawData()->create([
