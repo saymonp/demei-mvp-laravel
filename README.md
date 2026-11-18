@@ -9,7 +9,7 @@ Visão geral da estação selecionada, com indicadores de temperatura, irradiaç
 
 Permite comparar até quatro estações e diferentes períodos, visualizar gráficos e resumos, ajustar limiares de qualidade e auditar leituras.
 
-![Tela de análise comparativa entre estações](docs/images/dashboard-demo-dados-completos.png)
+![Tela de análise comparativa entre estações](docs/images/comparativo.png)
 
 ### Geração de documentos
 

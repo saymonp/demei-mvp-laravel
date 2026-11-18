@@ -51,6 +51,7 @@ const props = defineProps<{
   series: Record<number, Measurement[]>;
   seriesB: Record<number, Measurement[]>;
   overrides: OverrideMap;
+  requiresChunking: boolean;
 }>();
 const page = usePage<{ auth: { user: { id: number; name: string; email: string } } }>();
 
@@ -89,7 +90,7 @@ watch(() => props.selectedStationIds, ids => {
   comparisonIds.value = [...ids];
 });
 
-const COMPARISON_ONLY = ['series', 'seriesB', 'overrides', 'selectedStationIds', 'periodA', 'periodB'];
+const COMPARISON_ONLY = ['series', 'seriesB', 'overrides', 'requiresChunking', 'selectedStationIds', 'periodA', 'periodB'];
 
 function periodParams() {
   return {
@@ -878,6 +879,7 @@ function exportData() {
       :series="series"
       :series-b="seriesB"
       :overrides="overrides"
+      :requires-chunking="requiresChunking"
       :can-audit="canAudit"
       :can-generate-reports="canGenerateReports"
       :selected-dashboard-station-id="selectedStationId"

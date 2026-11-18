@@ -59,6 +59,89 @@ class StationComparisonControllerTest extends TestCase
             ->where("series.{$station->id}.0.value", 33.25));
     }
 
+    public function test_long_comparison_period_defers_series_loading_to_chunks(): void
+    {
+        $user = User::factory()->create();
+        $station = $this->createStation('Ijuí');
+        $secondStation = $this->createStation('Panambi');
+        $this->createMeasurement($station, '2026-09-30 12:00:00');
+
+        $this->actingAs($user)
+            ->get(route('stations.compare', [
+                'stations' => [$station->id, $secondStation->id],
+                'start' => '2026-06-01',
+                'end' => '2026-09-30',
+            ]))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('requiresChunking', true)
+                ->where('series', [])
+                ->where('seriesB', []));
+    }
+
+    public function test_30_day_comparison_period_defers_series_loading_to_chunks(): void
+    {
+        $user = User::factory()->create();
+        $station = $this->createStation('Ijuí');
+        $secondStation = $this->createStation('Panambi');
+        $this->createMeasurement($station, '2026-10-30 12:00:00');
+
+        $this->actingAs($user)
+            ->get(route('stations.compare', [
+                'stations' => [$station->id, $secondStation->id],
+                'start' => '2026-10-01',
+                'end' => '2026-10-30',
+            ]))
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('requiresChunking', true)
+                ->where('series', []));
+    }
+
+    public function test_comparison_series_endpoint_returns_the_requested_seven_day_chunk(): void
+    {
+        $user = User::factory()->create();
+        $station = $this->createStation('Ijuí');
+        $secondStation = $this->createStation('Panambi');
+        $measurement = $this->createMeasurement($station, '2026-07-07 12:00:00');
+
+        $this->actingAs($user)
+            ->getJson(route('stations.compare.series', [
+                'stations' => [$station->id, $secondStation->id],
+                'start' => '2026-07-01',
+                'end' => '2026-07-07',
+            ]))
+            ->assertOk()
+            ->assertJsonPath("series.{$station->id}.0.measurement_id", $measurement->id);
+    }
+
+    public function test_comparison_series_endpoint_rejects_chunks_longer_than_seven_days(): void
+    {
+        $user = User::factory()->create();
+        $station = $this->createStation('Ijuí');
+        $secondStation = $this->createStation('Panambi');
+
+        $this->actingAs($user)
+            ->getJson(route('stations.compare.series', [
+                'stations' => [$station->id, $secondStation->id],
+                'start' => '2026-07-01',
+                'end' => '2026-07-08',
+            ]))
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('end');
+    }
+
+    public function test_comparison_series_endpoint_requires_authentication(): void
+    {
+        $station = $this->createStation('Ijuí');
+        $secondStation = $this->createStation('Panambi');
+
+        $this->getJson(route('stations.compare.series', [
+            'stations' => [$station->id, $secondStation->id],
+            'start' => '2026-07-01',
+            'end' => '2026-07-01',
+        ]))
+            ->assertUnauthorized();
+    }
+
     public function test_authenticated_user_can_save_a_quality_override_with_its_original_flag(): void
     {
         $user = User::factory()->create();

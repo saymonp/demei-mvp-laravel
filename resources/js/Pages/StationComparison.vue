@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, shallowRef, watch } from 'vue';
 import { router } from '@inertiajs/vue3';
 import VChart from 'vue-echarts';
 import '../../css/weather-dashboard.css';
@@ -35,6 +35,7 @@ const props = withDefaults(defineProps<{
   series?: Record<number, Measurement[]>;
   seriesB?: Record<number, Measurement[]>;
   overrides?: OverrideMap;
+  requiresChunking?: boolean;
   canAudit?: boolean;
   canGenerateReports?: boolean;
   selectedDashboardStationId?: number | null;
@@ -42,7 +43,7 @@ const props = withDefaults(defineProps<{
   embedded?: boolean;
 }>(), {
   series: () => ({}), seriesB: () => ({}), overrides: () => ({}), canAudit: true,
-  canGenerateReports: false, selectedDashboardStationId: null, selectedDashboardDate: undefined, embedded: false,
+  requiresChunking: false, canGenerateReports: false, selectedDashboardStationId: null, selectedDashboardDate: undefined, embedded: false,
 });
 
 const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
@@ -53,13 +54,19 @@ const compareMode = ref(!!props.periodB);
 const thresholds = ref<Thresholds>({ ...DEFAULT_THRESHOLDS });
 const panelOpen = ref(false);
 const overrides = ref<OverrideMap>({ ...props.overrides });
+const series = shallowRef(props.series);
+const seriesB = shallowRef(props.seriesB);
+const isLoadingSeries = ref(props.requiresChunking);
+const seriesError = ref<string | null>(null);
+const loadProgress = ref({ completed: 0, total: 0 });
 const layout = ref<'overlay' | 'split'>('overlay');
 const metric = ref<'temp' | 'rad'>('temp');
+let activeController: AbortController | null = null;
 
 const selected = computed(() => selectedIds.value.map(id => props.stations.find(s => s.id === id)!).filter(Boolean));
-const hasSeriesData = computed(() => Object.values(props.series).some(rows => rows.length > 0));
-const useDemo = computed(() => import.meta.env.DEV && !props.embedded && !hasSeriesData.value);
-const raw = (id: number, b = false) => useDemo.value ? demoSeries(id, b ? periodB.value : periodA.value) : (b ? props.seriesB : props.series)[id] ?? [];
+const hasSeriesData = computed(() => Object.values(series.value).some(rows => rows.length > 0));
+const useDemo = computed(() => import.meta.env.DEV && !props.embedded && !isLoadingSeries.value && !hasSeriesData.value);
+const raw = (id: number, b = false) => useDemo.value ? demoSeries(id, b ? periodB.value : periodA.value) : (b ? seriesB.value : series.value)[id] ?? [];
 
 watch(() => props.selectedStationIds, ids => {
   if (ids && ids.join(',') !== selectedIds.value.join(',')) {
@@ -134,9 +141,118 @@ function resetOverride(p: ClassifiedPoint) {
   if (!useDemo.value) router.delete(route('stations.measurements.override.destroy'), { data: { measurement_id: p.measurement_id }, preserveScroll: true, preserveState: true });
 }
 
-// Sincroniza filtros com a URL / recarrega dados reais do servidor.
+type SeriesChunk = { series: Record<number, Measurement[]>; overrides: OverrideMap };
+
+function periodChunks(period: Period): Period[] {
+  const start = new Date(`${period.start}T12:00:00Z`);
+  const end = new Date(`${period.end}T12:00:00Z`);
+
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || start > end) {
+    throw new Error('Informe um intervalo de datas válido.');
+  }
+
+  const chunks: Period[] = [];
+
+  while (start <= end) {
+    const chunkEnd = new Date(start);
+    chunkEnd.setUTCDate(chunkEnd.getUTCDate() + 6);
+    if (chunkEnd > end) chunkEnd.setTime(end.getTime());
+
+    chunks.push({
+      start: start.toISOString().slice(0, 10),
+      end: chunkEnd.toISOString().slice(0, 10),
+    });
+
+    start.setTime(chunkEnd.getTime());
+    start.setUTCDate(start.getUTCDate() + 1);
+  }
+
+  return chunks;
+}
+
+async function fetchPeriod(period: Period, stationIds: number[], signal: AbortSignal): Promise<SeriesChunk> {
+  const combined: SeriesChunk = { series: {}, overrides: {} };
+
+  for (const chunk of periodChunks(period)) {
+    const query = new URLSearchParams();
+    stationIds.forEach(id => query.append('stations[]', String(id)));
+    query.set('start', chunk.start);
+    query.set('end', chunk.end);
+
+    const response = await fetch(`${route('stations.compare.series')}?${query}`, {
+      headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+      signal,
+    });
+
+    if (!response.ok) {
+      throw new Error(`Não foi possível carregar as medições (HTTP ${response.status}).`);
+    }
+
+    const result = await response.json() as SeriesChunk;
+
+    Object.entries(result.series).forEach(([stationId, rows]) => {
+      const id = Number(stationId);
+      combined.series[id] = [...(combined.series[id] ?? []), ...rows];
+    });
+    Object.assign(combined.overrides, result.overrides);
+    loadProgress.value.completed++;
+  }
+
+  return combined;
+}
+
+async function loadSeries() {
+  activeController?.abort();
+  const controller = new AbortController();
+  activeController = controller;
+  const periodARequest = periodA.value;
+  const periodBRequest = compareMode.value ? periodB.value : null;
+  const periods = [periodARequest, ...(periodBRequest ? [periodBRequest] : [])];
+
+  try {
+    const chunks = periods.flatMap(periodChunks);
+    loadProgress.value = { completed: 0, total: chunks.length };
+    isLoadingSeries.value = true;
+    seriesError.value = null;
+
+    const first = await fetchPeriod(periodARequest, selectedIds.value, controller.signal);
+    if (controller.signal.aborted) return;
+
+    let second: SeriesChunk = { series: {}, overrides: {} };
+    if (periodBRequest) {
+      second = await fetchPeriod(periodBRequest, selectedIds.value, controller.signal);
+    }
+    if (controller.signal.aborted) return;
+
+    series.value = first.series;
+    seriesB.value = second.series;
+    overrides.value = { ...first.overrides, ...second.overrides };
+  } catch (error) {
+    if (!controller.signal.aborted) {
+      console.error(error);
+      seriesError.value = error instanceof Error ? error.message : 'Falha ao carregar as medições.';
+    }
+  } finally {
+    if (activeController === controller) {
+      isLoadingSeries.value = false;
+      activeController = null;
+    }
+  }
+}
+
+onMounted(() => {
+  if (props.requiresChunking) void loadSeries();
+});
+
+// Sincroniza filtros com a URL e carrega o intervalo em blocos para limitar o uso de memória no servidor.
 watch([selectedIds, periodA, periodB, compareMode], () => {
-  if (useDemo.value) return;
+  activeController?.abort();
+  series.value = {};
+  seriesB.value = {};
+  overrides.value = {};
+  isLoadingSeries.value = true;
+  seriesError.value = null;
+
   router.get(route(props.embedded ? 'station-dashboard' : 'stations.compare'), {
     ...(props.embedded ? {
       station_id: props.selectedDashboardStationId,
@@ -146,7 +262,27 @@ watch([selectedIds, periodA, periodB, compareMode], () => {
     start: periodA.value.start,
     end: periodA.value.end,
     ...(compareMode.value ? { compare_start: periodB.value.start, compare_end: periodB.value.end } : {}),
-  }, { preserveState: true, preserveScroll: true, replace: true, only: ['series', 'seriesB', 'overrides', 'selectedStationIds', 'periodA', 'periodB'] });
+  }, {
+    preserveState: true,
+    preserveScroll: true,
+    replace: true,
+    only: ['selectedStationIds', 'periodA', 'periodB', 'series', 'seriesB', 'overrides', 'requiresChunking'],
+    onSuccess: () => {
+      if (props.requiresChunking) {
+        void loadSeries();
+        return;
+      }
+
+      series.value = props.series;
+      seriesB.value = props.seriesB;
+      overrides.value = { ...props.overrides };
+      isLoadingSeries.value = false;
+    },
+    onError: () => {
+      isLoadingSeries.value = false;
+      seriesError.value = 'Não foi possível aplicar o intervalo selecionado.';
+    },
+  });
 }, { deep: true });
 </script>
 
@@ -186,7 +322,14 @@ watch([selectedIds, periodA, periodB, compareMode], () => {
         <PeriodSelector v-model:period-a="periodA" v-model:period-b="periodB" v-model:compare="compareMode" />
       </section>
 
-      <p v-if="!useDemo && !hasSeriesData" class="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 text-sm text-slate-500">
+      <p v-if="seriesError" role="alert" class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        {{ seriesError }}
+        <button type="button" class="ml-2 font-semibold underline" @click="loadSeries">Tentar novamente</button>
+      </p>
+      <p v-else-if="isLoadingSeries" role="status" class="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 text-sm text-slate-500">
+        Carregando medições... {{ loadProgress.completed }} de {{ loadProgress.total }} blocos.
+      </p>
+      <p v-else-if="!useDemo && !hasSeriesData" class="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 text-sm text-slate-500">
         Nenhuma das estações selecionadas tem leituras no período escolhido.
       </p>
 

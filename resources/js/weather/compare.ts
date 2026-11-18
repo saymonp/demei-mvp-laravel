@@ -21,7 +21,7 @@ export function daysBetween({ start, end }: Period): string[] {
   const out: string[] = [];
   const d = new Date(`${start}T12:00:00Z`);
   const last = new Date(`${end}T12:00:00Z`);
-  while (d <= last && out.length < 31) { out.push(d.toISOString().slice(0, 10)); d.setUTCDate(d.getUTCDate() + 1); }
+  while (d <= last) { out.push(d.toISOString().slice(0, 10)); d.setUTCDate(d.getUTCDate() + 1); }
   return out;
 }
 

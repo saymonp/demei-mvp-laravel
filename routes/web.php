@@ -28,6 +28,8 @@ Route::middleware('auth')->group(function () {
         ->name('station-dashboard');
     Route::get('/stations/compare', [StationComparisonController::class, 'index'])
         ->name('stations.compare');
+    Route::get('/stations/compare/series', [StationComparisonController::class, 'series'])
+        ->name('stations.compare.series');
     Route::get('/stations/latest', StationLatestController::class)
         ->name('stations.latest');
     Route::post('/stations/measurements/override', [StationComparisonController::class, 'override'])
